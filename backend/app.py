@@ -198,6 +198,9 @@ def scoped_state(state,u):
     category_ids={row['category_id'] for row in state['rows']}
     state['categories']=[category for category in state['categories'] if category['id'] in category_ids]
     state['companies']=[company for company in state['companies'] if company['id'] in allowed]
+    state['price_history']=[h for h in state.get('price_history',[]) if h['company_id'] in allowed]
+    for row in state['rows']:
+        row['price_effective_dates']={key:value for key,value in row.get('price_effective_dates',{}).items() if key in allowed}
     state['trash']=[];state.pop('seed',None)
     return state
 
@@ -488,6 +491,15 @@ def validate_state(state):
     required = ['suppliers', 'categories', 'companies', 'fields', 'rows', 'trash']
     if not isinstance(state, dict) or any(not isinstance(state.get(k), list) for k in required):
         raise HTTPException(422, 'Onjuist back-upformaat.')
+    history=state.get('price_history',[])
+    if not isinstance(history,list):raise HTTPException(422,'Ongeldige prijshistorie.')
+    from backend.price_history import effective_date
+    for h in history:
+        if not isinstance(h,dict) or not all(isinstance(h.get(k),str) for k in ['row_id','company_id','date','amount','recorded_at']):
+            raise HTTPException(422,'Ongeldige prijshistorie.')
+        effective_date(h['date']);h['amount']=price_amount(h['amount'])
+        try:datetime.fromisoformat(h['recorded_at'])
+        except ValueError:raise HTTPException(422,'Ongeldige opslagdatum.')
     for kind in required:
         ids = [x.get('id') for x in state[kind] if isinstance(x, dict)]
         if len(ids) != len(state[kind]) or any(not isinstance(i,str) or not i for i in ids) or len(ids) != len(set(ids)):
@@ -567,6 +579,19 @@ def save(c, before, state, revision, actor, label, record_dates=True):
             for company_id, amount in row.get('company_prices', {}).items():
                 if old is None or old.get('company_prices', {}).get(company_id) != amount:
                     row.setdefault('price_entered_at', {})[company_id] = timestamp
+    if record_dates and before.get('price_history'):
+        from backend.price_history import record_prices, ZONE
+        today=datetime.now(ZONE).date().isoformat()
+        for row in state['rows']:
+            old=next((r for r in before['rows'] if r['id']==row['id']),{})
+            pairs={h['company_id'] for h in before['price_history'] if h['row_id']==row['id']}
+            for co in pairs:
+                previous=old.get('price') if co=='general' else old.get('company_prices',{}).get(co)
+                current=row.get('price') if co=='general' else row.get('company_prices',{}).get(co)
+                old_history=[h for h in before['price_history'] if h['row_id']==row['id'] and h['company_id']==co]
+                new_history=[h for h in state.get('price_history',[]) if h['row_id']==row['id'] and h['company_id']==co]
+                if previous!=current and old_history==new_history and (co=='general' or co in {c['id'] for c in state['companies']}):
+                    record_prices(state,before,row,{co:current or ''},today,now(),price_amount)
     validate_state(state)
     company_ids={company['id'] for company in state['companies']}
     for access in c.execute("SELECT company_ids FROM user_access WHERE role='company' AND active=1"):
@@ -786,6 +811,16 @@ def action(body:dict,u=Depends(user)):
             if not record:raise HTTPException(404,'Wijziging niet gevonden.')
             state=json.loads(record['before_data']);label='Gegevens teruggezet naar vóór: '+record['label']
         else:raise HTTPException(422,'Onbekende bewerking.')
+        if 'effective_date' in p and op in ['row_save','row_company_price','row_price','row_product']:
+            from backend.price_history import effective_date, record_prices
+            day=effective_date(p['effective_date'])
+            row['information_date']=day
+            if op=='row_company_price':values={p['company_id']:p['price']}
+            elif op=='row_price':values={'general':p['price']}
+            elif op=='row_save':values={**p.get('company_prices',{}),**({'general':p['price']} if 'price' in p else {})}
+            else:values={}
+            if values:record_prices(state,before,row,values,day,now(),price_amount)
+            label+=' (datum '+day+')'
         result=save(c,before,state,revision,u['email'],label,record_dates=op not in ['history_restore','trash_restore'])
         result['state']=scoped_state(result['state'],u);result['user']=u
         return result

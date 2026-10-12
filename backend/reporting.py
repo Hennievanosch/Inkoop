@@ -11,6 +11,7 @@ from decimal import Decimal
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 from fastapi import Depends, HTTPException, Request
+from backend.price_history import historical_total
 
 DEFAULT = {'frequency':'quarter','deadline':'day25','sender':'info@tve.nl'}
 ZONE = ZoneInfo('Europe/Amsterdam')
@@ -79,11 +80,12 @@ def register(app, db, user, admin, current_access, read_state, now, js, check_re
                 audit=c.execute('SELECT after_data FROM audit WHERE at<? ORDER BY at DESC,rowid DESC LIMIT 1',(cutoff,)).fetchone()
                 snapshot=json.loads(audit['after_data']) if audit else None
                 if pkey==key:snapshot=state
-                mine=totals(snapshot,personal_ids) if snapshot is not None else None
-                all_ids={co['id'] for co in snapshot['companies']} if snapshot else set()
+                mine=historical_total(snapshot,state,personal_ids,min(pend,today))
+                all_ids={co['id'] for co in state['companies']} | ({co['id'] for co in snapshot['companies']} if snapshot else set())
+                if pkey!=key:all_ids|={h['company_id'] for h in state.get('price_history',[]) if h['company_id']!='general'}
                 item={'key':pkey,'total':mine,'current':pkey==key}
                 # Only aggregated group totals are shared across company boundaries.
-                item['group_total']=totals(snapshot,all_ids) if snapshot is not None else None
+                item['group_total']=historical_total(snapshot,state,all_ids,min(pend,today))
                 series.insert(0,item);cursor=pstart-timedelta(days=1)
             due=deadline(end,cfg['deadline'])
             return {'companies':state['companies'] if u['role']=='admin' else [],'selected_company':selected,'config':cfg,'revision':revision,'period':key,'deadline':due.isoformat(),'overdue':today>due,'completion':completion,'coverage':completeness(state,ids),'series':series,'mail_ready':all(os.environ.get(k) for k in ['TVE_SMTP_HOST','TVE_SMTP_USER','TVE_SMTP_PASSWORD','CRON_SECRET'])}

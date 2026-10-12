@@ -52,6 +52,14 @@ with tempfile.TemporaryDirectory(prefix='tve-period-browser-') as folder:
                 price=page.locator('.product-prices-table tbody tr').first.locator('.price-input input')
                 price.fill('12,34');price.press('Enter')
                 expect(page.locator('.product-prices-table tbody tr').first).to_contain_text('Ingevoerd:')
+                row=page.locator('.product-prices-table tbody tr').first
+                row.locator('input[type=date]').fill('2026-06-30')
+                price.fill('8,00');price.press('Enter')
+                expect(price).to_have_value('8,00')
+                expect(page.locator('.save-state')).to_contain_text('Alle wijzigingen opgeslagen')
+                report=page.request.get(base+'/api/reporting').json()
+                assert next(p for p in report['series'] if p['key']=='2026-06')['total']=='8.00',report
+                assert report['series'][-1]['total']=='12.34',report
                 page.set_viewport_size({'width':390,'height':844})
                 page.get_by_role('button',name='Menu openen',exact=True).click()
                 page.get_by_role('button',name='Dashboard',exact=True).click()

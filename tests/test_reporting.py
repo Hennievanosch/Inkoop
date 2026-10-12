@@ -18,6 +18,45 @@ class PeriodTests(unittest.TestCase):
         with db() as c:
             c.execute("DELETE FROM settings WHERE key LIKE 'completion:%' OR key LIKE 'reminder:%' OR key='reporting_config'")
 
+    def test_historical_prices_are_ordered_by_effective_date(self):
+        state=self.get()['state'];row=state['rows'][0];co=state['companies'][0]['id']
+        for day,value in [('2026-07-01','30'),('2026-02-01','10'),('2026-05-01','20')]:
+            self.action('row_company_price',{'id':row['id'],'company_id':co,'price':value,'effective_date':day})
+        stored=next(r for r in self.get()['state']['rows'] if r['id']==row['id'])
+        self.assertEqual(stored['company_prices'][co],'30.00')
+        series={p['key']:p for p in self.client.get('/api/reporting?company_id='+co).json()['series']}
+        for key,total in [('2026-Q1','10.00'),('2026-Q2','20.00'),('2026-Q3','30.00')]:self.assertEqual(series[key]['total'],total)
+        self.action('row_company_price',{'id':row['id'],'company_id':co,'price':'11','effective_date':'2026-02-01'})
+        self.assertEqual(next(p for p in self.client.get('/api/reporting?company_id='+co).json()['series'] if p['key']=='2026-Q1')['total'],'11.00')
+        self.assertEqual(len(self.get()['state']['price_history']),3)
+        backup=self.client.get('/api/backup')
+        self.assertEqual(len(backup.json()['state']['price_history']),3)
+        expected=self.get()['state']
+        self.action('row_company_price',{'id':row['id'],'company_id':co,'price':'12','effective_date':'2026-02-01'})
+        preview=self.client.post('/api/backup/preview',files={'file':('history.json',backup.content)})
+        self.assertEqual(preview.status_code,200,preview.text)
+        restored=self.client.post('/api/backup/restore',json={'token':preview.json()['token'],'revision':self.get()['revision']})
+        self.assertEqual(restored.status_code,200,restored.text);self.assertEqual(restored.json()['state'],expected)
+        self.action('rows_delete',{'ids':[row['id']]})
+        self.assertEqual(self.client.get('/api/reporting?company_id='+co).json()['series'][-1]['total'],'0.00')
+        self.action('trash_restore',{'id':row['id']})
+        self.assertEqual(self.client.get('/api/reporting?company_id='+co).json()['series'][-1]['total'],'30.00')
+
+    def test_historical_input_preserves_newer_legacy_prices_and_permissions(self):
+        state=self.get()['state'];row=state['rows'][0];co=state['companies'][0]['id'];other=state['companies'][1]['id']
+        self.action('row_company_price',{'id':row['id'],'company_id':co,'price':'100'})
+        colleague=self.accept(self.invite([co]))
+        response=colleague.post('/api/action',json={'op':'row_company_price','revision':self.get()['revision'],'data':{'id':row['id'],'company_id':co,'price':'20','effective_date':'2026-05-01'}})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(next(r for r in self.get()['state']['rows'] if r['id']==row['id'])['company_prices'][co],'100.00')
+        for day in ['', '2026-02-30','2099-01-01']:
+            self.action('row_company_price',{'id':row['id'],'company_id':co,'price':'20','effective_date':day},expected=422)
+        self.action('row_company_price',{'id':row['id'],'company_id':other,'price':'99','effective_date':'2026-05-01'})
+        history=colleague.get('/api/state').json()['state']['price_history']
+        self.assertTrue(all(h['company_id']==co for h in history))
+        self.action('row_company_price',{'id':row['id'],'company_id':co,'price':'101'})
+        self.assertEqual(self.client.get('/api/reporting?company_id='+co).json()['series'][-1]['total'],'101.00')
+
     def test_calendar_boundaries(self):
         self.assertEqual(period(date(2027,1,1)),(date(2027,1,1),date(2027,3,31),'2027-Q1'))
         self.assertEqual(period(date(2026,12,31))[2],'2026-Q4')
