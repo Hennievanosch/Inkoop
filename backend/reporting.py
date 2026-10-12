@@ -82,7 +82,8 @@ def register(app, db, user, admin, current_access, read_state, now, js, check_re
                 mine=totals(snapshot,personal_ids) if snapshot is not None else None
                 all_ids={co['id'] for co in snapshot['companies']} if snapshot else set()
                 item={'key':pkey,'total':mine,'current':pkey==key}
-                if u['role']=='admin':item['group_total']=totals(snapshot,all_ids) if snapshot is not None else None
+                # Only aggregated group totals are shared across company boundaries.
+                item['group_total']=totals(snapshot,all_ids) if snapshot is not None else None
                 series.insert(0,item);cursor=pstart-timedelta(days=1)
             due=deadline(end,cfg['deadline'])
             return {'companies':state['companies'] if u['role']=='admin' else [],'selected_company':selected,'config':cfg,'revision':revision,'period':key,'deadline':due.isoformat(),'overdue':today>due,'completion':completion,'coverage':completeness(state,ids),'series':series,'mail_ready':all(os.environ.get(k) for k in ['TVE_SMTP_HOST','TVE_SMTP_USER','TVE_SMTP_PASSWORD','CRON_SECRET'])}

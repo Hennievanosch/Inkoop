@@ -35,6 +35,8 @@ with tempfile.TemporaryDirectory(prefix='tve-period-browser-') as folder:
                 expect(page.get_by_role('heading',name='Bedrijfsvergelijking',exact=True)).to_be_visible()
                 expect(page.get_by_role('heading',name='Vergelijking voor de hele groep',exact=True)).to_be_visible()
                 expect(page.locator('.period-bars').first.locator('.period-bar')).to_have_count(7)
+                for removed in ['Leveranciers per categorie','Categorieën × bedrijven','Verbindingen met bedrijven']:
+                    expect(page.get_by_role('heading',name=removed,exact=True)).to_have_count(0)
                 expect(page.get_by_role('button',name='Invoer voor deze periode bevestigen')).to_be_disabled()
                 page.get_by_text('Invoerperiode en herinneringen instellen',exact=True).click()
                 expect(page.get_by_label('Periode',exact=True)).to_have_value('quarter')
@@ -55,6 +57,15 @@ with tempfile.TemporaryDirectory(prefix='tve-period-browser-') as folder:
                 page.get_by_role('button',name='Dashboard',exact=True).click()
                 expect(page.get_by_role('heading',name='Bedrijfsvergelijking',exact=True)).to_be_visible()
                 page.screenshot(path=str(ROOT/'test-results/period-dashboard-mobile.png'),full_page=True)
+                state=page.request.get(base+'/api/state').json()['state']
+                company_id=state['companies'][0]['id']
+                invitation=page.request.post(base+'/api/users/invite',data={'email':'company@example.test','display_name':'Bedrijf','role':'company','company_ids':[company_id]}).json()
+                page.request.post(base+'/api/auth/logout',data={})
+                page.request.post(base+'/api/auth/accept-invitation',data={'token':invitation['token'],'password':'isolated-company-password'})
+                page.reload()
+                expect(page.get_by_role('heading',name='Vergelijking voor uw bedrijven',exact=True)).to_be_visible()
+                expect(page.get_by_role('heading',name='Vergelijking voor de hele groep',exact=True)).to_be_visible()
+                expect(page.get_by_label('Bedrijf voor de vergelijking')).to_have_count(0)
                 assert not errors,errors
                 browser.close()
                 print('Browser OK: periods, group comparison, config save, 63 products, entry date and mobile dashboard')

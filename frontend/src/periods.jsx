@@ -27,6 +27,6 @@ export function PeriodDashboard({api,post,revision,currentUser,onConfigChanged})
     </section>
     {admin&&<label className="period-company">Bedrijf voor de vergelijking<select aria-label="Bedrijf voor de vergelijking" value={company||report.selected_company||''} onChange={e=>setCompany(e.target.value)}>{report.companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
     <Comparison title={admin?'Bedrijfsvergelijking':'Vergelijking voor uw bedrijven'} series={report.series}/>
-    {admin&&<Comparison title="Vergelijking voor de hele groep" series={report.series} field="group_total"/>}
+    <Comparison title="Vergelijking voor de hele groep" series={report.series} field="group_total"/>
   </div>
 }
