@@ -35,6 +35,8 @@ with tempfile.TemporaryDirectory(prefix='tve-period-browser-') as folder:
                 expect(page.get_by_role('heading',name='Bedrijfsoverzicht',exact=True)).to_be_visible()
                 expect(page.get_by_role('heading',name='Groepsoverzicht',exact=True)).to_be_visible()
                 expect(page.locator('.period-bars').first.locator('.period-bar')).to_have_count(1)
+                expect(page.locator('.period-bars').first.locator('.period-bar rect')).to_have_attribute('fill','#f36b21')
+                expect(page.locator('.period-bars').first.locator('.period-bar rect')).to_have_attribute('fill-opacity','1')
                 reporting=page.request.get(base+'/api/reporting').json()
                 assert [p['key'] for p in reporting['series']]==['2026']
                 assert page.locator('.period-bars').first.locator('.period-bar').evaluate_all('(nodes)=>nodes.map(n=>n.dataset.period)')==['2026']
@@ -50,6 +52,15 @@ with tempfile.TemporaryDirectory(prefix='tve-period-browser-') as folder:
                 expect(page.get_by_role('heading',name='Jaargegevens 2026 · informatief',exact=True)).to_be_visible()
                 (ROOT/'test-results').mkdir(exist_ok=True)
                 page.screenshot(path=str(ROOT/'test-results/period-dashboard.png'),full_page=True)
+                page.get_by_role('button',name='BACKUP',exact=True).click()
+                backup_dialog=page.get_by_role('dialog',name='BACKUP',exact=True)
+                expect(backup_dialog).to_be_visible()
+                assert 'blur' in page.locator('.backup-backdrop').evaluate('(node)=>getComputedStyle(node).backdropFilter')
+                backup_dialog.get_by_role('button',name='Extra back-up maken',exact=True).click()
+                expect(backup_dialog.get_by_role('status')).to_contain_text('De extra back-up is gemaakt.')
+                snapshot_id=page.request.get(base+'/api/backups').json()['backups'][0]['id']
+                page.screenshot(path=str(ROOT/'test-results/backup-popup.png'),animations='disabled')
+                page.get_by_role('button',name='Sluiten',exact=True).click()
                 page.get_by_role('button',name='Categorieën',exact=True).click()
                 page.locator('.entity-table button[aria-label^="Bewerk "]').first.click()
                 dialog=page.get_by_role('dialog');expect(dialog).to_be_visible()
@@ -85,8 +96,19 @@ with tempfile.TemporaryDirectory(prefix='tve-period-browser-') as folder:
                 page.get_by_role('button',name='Menu openen',exact=True).click()
                 page.get_by_role('button',name='Dashboard',exact=True).click()
                 expect(page.get_by_role('heading',name='Bedrijfsoverzicht',exact=True)).to_be_visible()
+                assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth')
                 page.screenshot(path=str(ROOT/'test-results/period-dashboard-mobile.png'),full_page=True)
+                page.get_by_role('button',name='BACKUP',exact=True).click()
+                backup_dialog=page.get_by_role('dialog',name='BACKUP',exact=True)
+                backup_dialog.get_by_label('Beschikbare back-ups',exact=False).select_option(snapshot_id)
+                expect(backup_dialog.get_by_role('button',name='Gekozen back-up terugzetten',exact=True)).to_be_disabled()
+                backup_dialog.get_by_label('Ik wil de huidige gegevens vervangen door deze back-up.',exact=True).check()
+                backup_dialog.get_by_role('button',name='Gekozen back-up terugzetten',exact=True).click()
+                expect(backup_dialog).to_have_count(0)
                 state=page.request.get(base+'/api/state').json()['state']
+                assert next(c for c in state['categories'] if c['id']==category['id'])['name']==original
+                assert all(not r.get('company_prices') for r in state['rows'])
+                assert page.request.get(base+'/api/backups').json()['backups'][0]['kind']=='before_restore'
                 company_id=state['companies'][0]['id']
                 invitation=page.request.post(base+'/api/users/invite',data={'email':'company@example.test','display_name':'Bedrijf','role':'company','company_ids':[company_id]}).json()
                 page.request.post(base+'/api/auth/logout',data={})
@@ -95,6 +117,7 @@ with tempfile.TemporaryDirectory(prefix='tve-period-browser-') as folder:
                 expect(page.get_by_role('heading',name='Overzicht voor uw bedrijven',exact=True)).to_be_visible()
                 expect(page.get_by_role('heading',name='Groepsoverzicht',exact=True)).to_be_visible()
                 expect(page.get_by_label('Bedrijf in het overzicht')).to_have_count(0)
+                expect(page.get_by_role('button',name='BACKUP',exact=True)).to_have_count(0)
                 assert not errors,errors
                 browser.close()
                 print('Browser OK: periods, group comparison, config save, 63 products, entry date and mobile dashboard')

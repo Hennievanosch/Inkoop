@@ -107,6 +107,7 @@ def initialize():
         CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS imports(id TEXT PRIMARY KEY, user_id TEXT NOT NULL, payload TEXT NOT NULL, created REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS rate_limits(key TEXT PRIMARY KEY, count INTEGER NOT NULL, until REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS backup_snapshots(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,kind TEXT NOT NULL,actor TEXT NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,checksum TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS user_access(user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('admin','company')), company_ids TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, version INTEGER NOT NULL DEFAULT 1, display_name TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS invitations(id TEXT PRIMARY KEY, email TEXT NOT NULL, display_name TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','company')), company_ids TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL, expires REAL NOT NULL, invited_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, used_at TEXT, canceled_at TEXT);
@@ -1269,6 +1270,9 @@ def cancel_transfer(token:str,u=Depends(admin)):
 
 from backend.reporting import register as register_reporting
 register_reporting(app, db, user, admin, current_access, read_state, now, js, check_revision)
+
+from backend.backups import register as register_backups
+register_backups(app,db,admin,check_admin,read_state,save,validate_state,check_revision,now,js)
 
 DIST=ROOT/'frontend/dist'
 if DIST.exists():

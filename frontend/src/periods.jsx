@@ -2,7 +2,7 @@ import React,{useEffect,useState} from 'react';
 import {formatPrice} from './pricing';
 import BrandSpinner from './BrandSpinner';
 
-const yearColors=['#244c78','#0099cb','#b03178','#dc6030','#268575','#a48d53'];
+const yearColors=['#244c78','#0099cb','#f36b21','#268575','#b03178','#a48d53'];
 const yearColor=year=>yearColors[((Number(year)-2024)%yearColors.length+yearColors.length)%yearColors.length];
 const compactMoney=value=>new Intl.NumberFormat('nl-NL',{style:'currency',currency:'EUR',notation:'compact',maximumFractionDigits:1}).format(value);
 
@@ -31,7 +31,7 @@ function Comparison({title,series,field='total'}){
         {[0,.5,1].map(fraction=>{const y=bottom-fraction*(bottom-top);return <g key={fraction}><line x1={left} x2={right} y1={y} y2={y} className="period-gridline"/><text x={left-5} y={y+3} textAnchor="end" className="period-axis-label">{compactMoney(maximum*fraction)}</text></g>})}
         {points.map(p=><g className="period-bar" key={p.key} data-period={p.key} data-year={p.year}>
           <title>{`${p.key}${p.annual?' (heel jaar)':p.current?' (lopend)':''}: ${p.known?formatPrice(p[field]):p.future?'Nog niet begonnen':'Geen historie'}`}</title>
-          {p.known?<rect x={p.x-barWidth/2} y={p.y} width={barWidth} height={bottom-p.y} rx={3} fill={p.color} fillOpacity={.75}/>:<text x={p.x} y={bottom-8} textAnchor="middle" className="period-no-history">–</text>}
+          {p.known?<rect x={p.x-barWidth/2} y={p.y} width={barWidth} height={bottom-p.y} rx={3} fill={p.color} fillOpacity={1}/>:<text x={p.x} y={bottom-8} textAnchor="middle" className="period-no-history">–</text>}
           <text x={p.x+(p.annual?0:p.year===quarterYears[0]?-3:3)} y={p.known?Math.max(p.y-8,12):top-12} textAnchor={p.annual?'middle':p.year===quarterYears[0]?'end':'start'} style={{fontSize:quarterYears.length>1?8:9}} className="period-amount-label">{p.known?compactMoney(Number(p[field])):''}</text>
           <text x={p.x} y={bottom+15} textAnchor="middle" className="period-axis-label">{p.annual?'Heel jaar':p.year}{p.current&&!p.annual?' · nu':''}</text>
         </g>)}

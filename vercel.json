@@ -19,6 +19,6 @@
     {"handle": "filesystem"},
     {"src": "/(.*)", "dest": "/frontend/index.html"}
   ],
-  "crons": [{"path": "/api/reminders", "schedule": "0 7 * * *"}],
+  "crons": [{"path": "/api/reminders", "schedule": "0 7 * * *"}, {"path": "/api/backups/monthly", "schedule": "0 2 1 * *"}],
   "regions": ["fra1"]
 }
