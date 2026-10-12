@@ -15,6 +15,7 @@ from backend.price_history import historical_total
 
 DEFAULT = {'frequency':'quarter','deadline':'day25','sender':'info@tve.nl'}
 ZONE = ZoneInfo('Europe/Amsterdam')
+MEASUREMENT_START = date(2027,1,1)
 
 
 def period(day, frequency='quarter'):
@@ -41,9 +42,17 @@ def totals(state, company_ids):
     return format(sum(values,Decimal('0')),'.2f')
 
 
-def completeness(state, ids):
+def completeness(state, ids, since=None, until=None):
     expected=[(row,co) for row in state['rows'] for co in row['company_ids'] if co in ids]
-    missing=sum(row.get('company_prices',{}).get(co) in (None,'') for row,co in expected)
+    def absent(row,co):
+        if since is None:return row.get('company_prices',{}).get(co) in (None,'')
+        records=[h for h in state.get('price_history',[]) if h['row_id']==row['id'] and h['company_id']==co and since.isoformat()<=h['date']<=until.isoformat()]
+        if records:return max(records,key=lambda h:(h['date'],h['recorded_at']))['amount']==''
+        day=row.get('price_effective_dates',{}).get(co)
+        timestamp=row.get('price_entered_at',{}).get(co)
+        if not day and timestamp:day=datetime.fromisoformat(timestamp).astimezone(ZONE).date().isoformat()
+        return row.get('company_prices',{}).get(co) in (None,'') or day is None or not since.isoformat()<=day<=until.isoformat()
+    missing=sum(absent(row,co) for row,co in expected)
     return {'expected':len(expected),'missing':missing}
 
 
@@ -72,26 +81,34 @@ def register(app, db, user, admin, current_access, read_state, now, js, check_re
                 personal_ids={selected}
             else:selected=''
             completion=valid_completion(c,u['id'],key,state,ids)
-            # Compare complete calendar years by quarter, independent of the input deadline cadence.
+            informative=today<MEASUREMENT_START
+            if informative:start,end,key=date(2026,1,1),date(2026,12,31),'2026'
+            periods=[(date(2026,1,1),date(2026,12,31),'2026','year')]
+            if not informative:
+                for year in range(max(2027,today.year-1),today.year+1):
+                    for quarter in range(1,5):
+                        pstart,pend,pkey=period(date(year,(quarter-1)*3+1,1),'quarter')
+                        periods.append((pstart,pend,pkey,'quarter'))
             series=[]
-            for year in [today.year-1,today.year]:
-                for quarter in range(1,5):
-                    pstart,pend,pkey=period(date(year,(quarter-1)*3+1,1),'quarter')
-                    future=pstart>today
-                    current=pstart<=today<=pend
-                    snapshot=None
-                    if not future:
-                        cutoff=datetime.combine(min(pend,today)+timedelta(days=1),time.min,ZONE).astimezone(timezone.utc).isoformat()
-                        audit=c.execute('SELECT after_data FROM audit WHERE at<? ORDER BY at DESC,rowid DESC LIMIT 1',(cutoff,)).fetchone()
-                        snapshot=json.loads(audit['after_data']) if audit else None
-                        if current:snapshot=state
-                    mine=None if future else historical_total(snapshot,state,personal_ids,min(pend,today))
-                    all_ids={co['id'] for co in state['companies']} | ({co['id'] for co in snapshot['companies']} if snapshot else set())
-                    if not current:all_ids|={h['company_id'] for h in state.get('price_history',[]) if h['company_id']!='general'}
-                    group=None if future else historical_total(snapshot,state,all_ids,min(pend,today))
-                    series.append({'key':pkey,'total':mine,'group_total':group,'current':current,'future':future})
-            due=deadline(end,cfg['deadline'])
-            return {'companies':state['companies'] if u['role']=='admin' else [],'selected_company':selected,'config':cfg,'revision':revision,'period':key,'deadline':due.isoformat(),'overdue':today>due,'completion':completion,'coverage':completeness(state,ids),'series':series,'mail_ready':all(os.environ.get(k) for k in ['TVE_SMTP_HOST','TVE_SMTP_USER','TVE_SMTP_PASSWORD','CRON_SECRET'])}
+            for pstart,pend,pkey,granularity in periods:
+                future=pstart>today
+                current=pstart<=today<=pend
+                snapshot=None
+                if not future:
+                    cutoff=datetime.combine(min(pend,today)+timedelta(days=1),time.min,ZONE).astimezone(timezone.utc).isoformat()
+                    audit=c.execute('SELECT after_data FROM audit WHERE at<? ORDER BY at DESC,rowid DESC LIMIT 1',(cutoff,)).fetchone()
+                    snapshot=json.loads(audit['after_data']) if audit else None
+                    if current:snapshot=state
+                since=pstart if granularity=='quarter' else None
+                mine=None if future else historical_total(snapshot,state,personal_ids,min(pend,today),since=since)
+                all_ids={co['id'] for co in state['companies']} | ({co['id'] for co in snapshot['companies']} if snapshot else set())
+                if not current:all_ids|={h['company_id'] for h in state.get('price_history',[]) if h['company_id']!='general'}
+                group=None if future else historical_total(snapshot,state,all_ids,min(pend,today),since=since)
+                series.append({'key':pkey,'total':mine,'group_total':group,'current':current,'future':future,'granularity':granularity})
+            due=None if informative else deadline(end,cfg['deadline'])
+            coverage=completeness(state,ids,since=None if informative else start,until=min(end,today))
+            if coverage['missing']:completion=None
+            return {'companies':state['companies'] if u['role']=='admin' else [],'selected_company':selected,'config':cfg,'revision':revision,'period':key,'deadline':due.isoformat() if due else None,'overdue':bool(due and today>due),'informative_only':informative,'measurement_start':'2027-01-01','completion':completion if not informative else None,'coverage':coverage,'series':series,'mail_ready':all(os.environ.get(k) for k in ['TVE_SMTP_HOST','TVE_SMTP_USER','TVE_SMTP_PASSWORD','CRON_SECRET'])}
 
     @app.post('/api/reporting/config')
     def update_config(body:dict,u=Depends(admin)):
@@ -110,10 +127,12 @@ def register(app, db, user, admin, current_access, read_state, now, js, check_re
     def complete(body:dict,u=Depends(user)):
         with db() as c:
             c.execute('BEGIN IMMEDIATE');u=current_access(c,u['id']);state,revision=read_state(c);check_revision(body,revision)
-            _,_,key=period(datetime.now(ZONE).date(),config(c)['frequency'])
+            today=datetime.now(ZONE).date()
+            if today<MEASUREMENT_START:raise HTTPException(422,'2026 is informatief. Periodebevestiging begint vanaf januari 2027.')
+            start,end,key=period(today,config(c)['frequency'])
             if body.get('period') != key:raise HTTPException(409,'De periode is veranderd. Vernieuw het dashboard.')
             ids={co['id'] for co in state['companies']} if u['role']=='admin' else set(u['company_ids'])
-            coverage=completeness(state,ids)
+            coverage=completeness(state,ids,since=start,until=min(end,today))
             if not coverage['expected'] or coverage['missing']:raise HTTPException(422,'Vul eerst alle productprijzen voor uw bedrijven in. Nul is een geldige prijs.')
             value={'at':now(),'revision':revision,'company_ids':sorted(ids),'fingerprint':price_fingerprint(state,ids)}
             setting=f'completion:{u["id"]}:{key}'
@@ -124,11 +143,12 @@ def register(app, db, user, admin, current_access, read_state, now, js, check_re
     def reminders(request:Request):
         secret=os.environ.get('CRON_SECRET','')
         if not secret or not hmac.compare_digest(request.headers.get('authorization',''),'Bearer '+secret):raise HTTPException(401,'Geen toegang.')
+        if datetime.now(ZONE).date()<MEASUREMENT_START:return {'sent':0,'reason':'Kwartaalmetingen starten in januari 2027.'}
         if not all(os.environ.get(k) for k in ['TVE_SMTP_HOST','TVE_SMTP_USER','TVE_SMTP_PASSWORD']):raise HTTPException(503,'De maildienst is nog niet ingesteld.')
         sent=0
         with db() as c:
             # Lock across instances so retries do not send the same reminder twice.
-            c.execute('BEGIN IMMEDIATE');cfg=config(c);today=datetime.now(ZONE).date();_,end,key=period(today,cfg['frequency']);due=deadline(end,cfg['deadline'])
+            c.execute('BEGIN IMMEDIATE');cfg=config(c);today=datetime.now(ZONE).date();start,end,key=period(today,cfg['frequency']);due=deadline(end,cfg['deadline'])
             if today<due:return {'sent':0}
             users=c.execute('SELECT u.id,u.email FROM users u JOIN user_access a ON a.user_id=u.id WHERE a.active=1').fetchall()
             for recipient in users:
@@ -136,7 +156,7 @@ def register(app, db, user, admin, current_access, read_state, now, js, check_re
                 ids={co['id'] for co in state['companies']} if access['role']=='admin' else set(access['company_ids'])
                 if not completeness(state,ids)['expected']:continue
                 marker=f'reminder:{recipient["id"]}:{key}'
-                if valid_completion(c,recipient['id'],key,state,ids) or c.execute('SELECT 1 FROM settings WHERE key=?',(marker,)).fetchone():continue
+                if (valid_completion(c,recipient['id'],key,state,ids) and not completeness(state,ids,since=start,until=min(end,today))['missing']) or c.execute('SELECT 1 FROM settings WHERE key=?',(marker,)).fetchone():continue
                 message=EmailMessage();message['From']=cfg['sender'];message['To']=recipient['email'];message['Subject']=f'TVE: vul uw prijzen in voor {key}'
                 message.set_content(f'Uw prijsinvoer voor {key} is nog niet bevestigd. De deadline is {due:%d-%m-%Y}. Vul uw productprijzen in en bevestig de periode op het dashboard.\n\nhttps://tve-leveranciers.vercel.app\n')
                 try:
