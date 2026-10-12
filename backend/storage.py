@@ -97,13 +97,16 @@ class PostgresConnection:
             # One transaction-scoped lock protects read/check/write and account creation
             # across independent Vercel instances. READ COMMITTED sees fresh data after waiting.
             return Cursor(self.connection.execute('SELECT pg_advisory_xact_lock(1964098801)'))
-        sql=sql.replace('?', '%s')
+        # Psycopg parses every percent sign whenever parameters are supplied,
+        # even for an empty tuple. SQL LIKE wildcards must remain SQL literals.
+        # This matters for the completion settings included in a backup.
+        if params:sql=sql.replace('%','%%').replace('?', '%s')
         sql=re.sub(r'\browid\b','seq',sql)
         if sql.startswith('INSERT OR REPLACE INTO rate_limits'):
             sql=sql.replace('INSERT OR REPLACE','INSERT')+' ON CONFLICT(key) DO UPDATE SET count=EXCLUDED.count, until=EXCLUDED.until'
         elif sql.startswith('INSERT OR IGNORE'):
             sql=sql.replace('INSERT OR IGNORE','INSERT')+' ON CONFLICT DO NOTHING'
-        return Cursor(self.connection.execute(sql,params))
+        return Cursor(self.connection.execute(sql,params if params else None))
 
     def executescript(self,script):
         import psycopg

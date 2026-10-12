@@ -67,48 +67,54 @@ def valid_completion(c, user_id, key, state, ids):
     return value if value and value.get('fingerprint')==price_fingerprint(state,ids) else None
 
 
+def report_data(c, state, revision, u, company_id='', today=None):
+    """Use identical annual/quarterly totals for the app and its Excel dashboard."""
+    cfg=config(c)
+    today=today or datetime.now(ZONE).date(); start,end,key=period(today,cfg['frequency'])
+    ids={co['id'] for co in state['companies']} if u['role']=='admin' else set(u['company_ids'])
+    personal_ids=ids
+    if u['role']=='admin':
+        selected=company_id or next(iter(co['id'] for co in state['companies']), '')
+        if selected and selected not in ids:raise HTTPException(422,'Onbekend bedrijf.')
+        personal_ids={selected}
+    else:selected=''
+    completion=valid_completion(c,u['id'],key,state,ids)
+    informative=today<MEASUREMENT_START
+    if informative:start,end,key=date(2026,1,1),date(2026,12,31),'2026'
+    periods=[(date(2026,1,1),date(2026,12,31),'2026','year')]
+    if not informative:
+        for year in range(max(2027,today.year-1),today.year+1):
+            for quarter in range(1,5):
+                pstart,pend,pkey=period(date(year,(quarter-1)*3+1,1),'quarter')
+                periods.append((pstart,pend,pkey,'quarter'))
+    series=[]
+    for pstart,pend,pkey,granularity in periods:
+        future=pstart>today
+        current=pstart<=today<=pend
+        snapshot=None
+        if not future:
+            cutoff=datetime.combine(min(pend,today)+timedelta(days=1),time.min,ZONE).astimezone(timezone.utc).isoformat()
+            audit=c.execute('SELECT after_data FROM audit WHERE at<? ORDER BY at DESC,rowid DESC LIMIT 1',(cutoff,)).fetchone()
+            snapshot=json.loads(audit['after_data']) if audit else None
+            if current:snapshot=state
+        since=pstart if granularity=='quarter' else None
+        mine=None if future else historical_total(snapshot,state,personal_ids,min(pend,today),since=since)
+        all_ids={co['id'] for co in state['companies']} | ({co['id'] for co in snapshot['companies']} if snapshot else set())
+        if not current:all_ids|={h['company_id'] for h in state.get('price_history',[]) if h['company_id']!='general'}
+        group=None if future else historical_total(snapshot,state,all_ids,min(pend,today),since=since)
+        series.append({'key':pkey,'total':mine,'group_total':group,'current':current,'future':future,'granularity':granularity})
+    due=None if informative else deadline(end,cfg['deadline'])
+    coverage=completeness(state,ids,since=None if informative else start,until=min(end,today))
+    if coverage['missing']:completion=None
+    return {'companies':state['companies'] if u['role']=='admin' else [],'selected_company':selected,'config':cfg,'revision':revision,'period':key,'deadline':due.isoformat() if due else None,'overdue':bool(due and today>due),'informative_only':informative,'measurement_start':'2027-01-01','completion':completion if not informative else None,'coverage':coverage,'series':series,'mail_ready':all(os.environ.get(k) for k in ['TVE_SMTP_HOST','TVE_SMTP_USER','TVE_SMTP_PASSWORD','CRON_SECRET'])}
+
+
 def register(app, db, user, admin, current_access, read_state, now, js, check_revision):
     @app.get('/api/reporting')
     def report(company_id:str='',u=Depends(user)):
         with db() as c:
-            u=current_access(c,u['id']); state,revision=read_state(c); cfg=config(c)
-            today=datetime.now(ZONE).date(); start,end,key=period(today,cfg['frequency'])
-            ids={co['id'] for co in state['companies']} if u['role']=='admin' else set(u['company_ids'])
-            personal_ids=ids
-            if u['role']=='admin':
-                selected=company_id or next(iter(co['id'] for co in state['companies']), '')
-                if selected and selected not in ids:raise HTTPException(422,'Onbekend bedrijf.')
-                personal_ids={selected}
-            else:selected=''
-            completion=valid_completion(c,u['id'],key,state,ids)
-            informative=today<MEASUREMENT_START
-            if informative:start,end,key=date(2026,1,1),date(2026,12,31),'2026'
-            periods=[(date(2026,1,1),date(2026,12,31),'2026','year')]
-            if not informative:
-                for year in range(max(2027,today.year-1),today.year+1):
-                    for quarter in range(1,5):
-                        pstart,pend,pkey=period(date(year,(quarter-1)*3+1,1),'quarter')
-                        periods.append((pstart,pend,pkey,'quarter'))
-            series=[]
-            for pstart,pend,pkey,granularity in periods:
-                future=pstart>today
-                current=pstart<=today<=pend
-                snapshot=None
-                if not future:
-                    cutoff=datetime.combine(min(pend,today)+timedelta(days=1),time.min,ZONE).astimezone(timezone.utc).isoformat()
-                    audit=c.execute('SELECT after_data FROM audit WHERE at<? ORDER BY at DESC,rowid DESC LIMIT 1',(cutoff,)).fetchone()
-                    snapshot=json.loads(audit['after_data']) if audit else None
-                    if current:snapshot=state
-                since=pstart if granularity=='quarter' else None
-                mine=None if future else historical_total(snapshot,state,personal_ids,min(pend,today),since=since)
-                all_ids={co['id'] for co in state['companies']} | ({co['id'] for co in snapshot['companies']} if snapshot else set())
-                if not current:all_ids|={h['company_id'] for h in state.get('price_history',[]) if h['company_id']!='general'}
-                group=None if future else historical_total(snapshot,state,all_ids,min(pend,today),since=since)
-                series.append({'key':pkey,'total':mine,'group_total':group,'current':current,'future':future,'granularity':granularity})
-            due=None if informative else deadline(end,cfg['deadline'])
-            coverage=completeness(state,ids,since=None if informative else start,until=min(end,today))
-            if coverage['missing']:completion=None
-            return {'companies':state['companies'] if u['role']=='admin' else [],'selected_company':selected,'config':cfg,'revision':revision,'period':key,'deadline':due.isoformat() if due else None,'overdue':bool(due and today>due),'informative_only':informative,'measurement_start':'2027-01-01','completion':completion if not informative else None,'coverage':coverage,'series':series,'mail_ready':all(os.environ.get(k) for k in ['TVE_SMTP_HOST','TVE_SMTP_USER','TVE_SMTP_PASSWORD','CRON_SECRET'])}
+            u=current_access(c,u['id']); state,revision=read_state(c)
+            return report_data(c,state,revision,u,company_id)
 
     @app.post('/api/reporting/config')
     def update_config(body:dict,u=Depends(admin)):

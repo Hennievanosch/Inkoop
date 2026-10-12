@@ -378,7 +378,7 @@ assert owner.post('/api/users/invite',json={'email':'migration-pending@example.t
     def test_csv_roundtrip_and_filtered_export(self):
         before=self.get()['state'];after=self.import_exported('csv')['state'];self.assertEqual(before['rows'],after['rows'])
         response=self.client.post('/api/export',json={'format':'xlsx','ids':[before['rows'][0]['id']]})
-        w=load_workbook(io.BytesIO(response.content),data_only=True);self.assertEqual(w.active.max_row,2)
+        w=load_workbook(io.BytesIO(response.content),data_only=True);self.assertEqual(w['Leveranciers'].max_row,2)
 
     def test_supplier_totals_are_shared_by_products_and_survive_restart(self):
         s=self.get()['state'];supplier=next(x for x in s['suppliers'] if sum(r['supplier_id']==x['id'] for r in s['rows'])>1)
@@ -479,7 +479,7 @@ assert owner.post('/api/users/invite',json={'email':'migration-pending@example.t
         for fmt in ['xlsx','csv']:
             after=self.import_exported(fmt)['state'];self.assertEqual(after,before)
         response=self.client.post('/api/export',json={'format':'xlsx','ids':[a['id'],b['id']]})
-        exported=list(load_workbook(io.BytesIO(response.content),data_only=True).active.values)
+        exported=list(load_workbook(io.BytesIO(response.content),data_only=True)['Leveranciers'].values)
         headers=exported[0];index=headers.index('Prijs (€) - Bedrijf hernoemd')
         self.assertEqual(len(exported),3)
         self.assertEqual([r[index] for r in exported[1:]],['10.50','0.00'])

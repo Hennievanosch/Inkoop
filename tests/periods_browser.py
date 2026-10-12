@@ -7,6 +7,7 @@ import tempfile
 import time
 from pathlib import Path
 import httpx
+from openpyxl import load_workbook
 from playwright.sync_api import sync_playwright, expect
 
 ROOT=Path(__file__).resolve().parent.parent
@@ -52,10 +53,29 @@ with tempfile.TemporaryDirectory(prefix='tve-period-browser-') as folder:
                 expect(page.get_by_role('heading',name='Jaargegevens 2026 · informatief',exact=True)).to_be_visible()
                 (ROOT/'test-results').mkdir(exist_ok=True)
                 page.screenshot(path=str(ROOT/'test-results/period-dashboard.png'),full_page=True)
+                companies=page.request.get(base+'/api/state').json()['state']['companies']
+                chosen=companies[1]
+                with page.expect_response(lambda response:'/api/reporting?company_id='+chosen['id'] in response.url):
+                    page.get_by_label('Bedrijf in het overzicht',exact=True).select_option(chosen['id'])
+                with page.expect_download() as downloaded:
+                    with page.expect_request(lambda request:request.url.endswith('/api/files/download')) as export_request:
+                        page.get_by_role('button',name='Exporteren',exact=True).click()
+                assert export_request.value.post_data_json['company_id']==chosen['id']
+                downloaded.value.save_as(str(ROOT/'test-results/dashboard-export.xlsx'))
+                workbook=load_workbook(ROOT/'test-results/dashboard-export.xlsx')
+                assert workbook.sheetnames[0]=='Dashboard',workbook.sheetnames
+                assert len(workbook['Dashboard']._charts)==3
+                assert len(workbook['Dashboard']._images)==1
+                assert any(chosen['name'] in str(cell.value) for row in workbook['Dashboard'] for cell in row)
+                expect(page.get_by_role('button',name='Exporteren',exact=True)).to_be_enabled()
+                page.route('**/api/backups',lambda route:route.fulfill(status=503,content_type='text/plain',body='Temporarily unavailable'),times=1)
                 page.get_by_role('button',name='BACKUP',exact=True).click()
                 backup_dialog=page.get_by_role('dialog',name='BACKUP',exact=True)
                 expect(backup_dialog).to_be_visible()
                 assert 'blur' in page.locator('.backup-backdrop').evaluate('(node)=>getComputedStyle(node).backdropFilter')
+                expect(backup_dialog.get_by_role('alert')).to_contain_text('HTTP 503')
+                expect(backup_dialog.get_by_text('Er zijn nog geen back-ups.',exact=False)).to_have_count(0)
+                backup_dialog.get_by_role('button',name='Opnieuw laden',exact=True).click()
                 backup_dialog.get_by_role('button',name='Extra back-up maken',exact=True).click()
                 expect(backup_dialog.get_by_role('status')).to_contain_text('De extra back-up is gemaakt.')
                 snapshot_id=page.request.get(base+'/api/backups').json()['backups'][0]['id']

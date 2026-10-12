@@ -5,9 +5,10 @@ const kinds={monthly:'Automatisch',manual:'Tussentijds',before_restore:'Veilighe
 const date=value=>new Date(value).toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam'});
 
 export default function BackupsPanel({api,post,Button,revision,onBusyChange,onRestored}){
-  const [records,setRecords]=useState(null),[selected,setSelected]=useState(''),[confirmed,setConfirmed]=useState(false),[base,setBase]=useState(revision),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('');
-  useEffect(()=>{let active=true;api('/backups').then(result=>{if(active){setRecords(result.backups);setBase(result.revision)}}).catch(e=>{if(active)setError(e.message)});return()=>{active=false}},[]);
+  const [records,setRecords]=useState(null),[selected,setSelected]=useState(''),[confirmed,setConfirmed]=useState(false),[base,setBase]=useState(revision),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[message,setMessage]=useState('');
+  useEffect(()=>{let active=true;api('/backups').then(result=>{if(active){setRecords(result.backups);setBase(result.revision)}}).catch(e=>{if(active)setError(e.message)}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[]);
   async function reload(){const result=await api('/backups');setRecords(result.backups);setBase(result.revision);setConfirmed(false);return result;}
+  async function retry(){setLoading(true);setError('');try{await reload()}catch(e){setError(e.message)}finally{setLoading(false)}}
   async function run(restore=false){
     setBusy(true);onBusyChange(true);setError('');setMessage('');
     try{
@@ -21,7 +22,7 @@ export default function BackupsPanel({api,post,Button,revision,onBusyChange,onRe
     <p>Iedere eerste dag van de maand wordt automatisch een back-up gemaakt. De zeven nieuwste blijven bewaard; daarna vervalt de oudste.</p>
     {error&&<div className="alert error" role="alert">{error}</div>}
     {message&&<div className="alert backup-success" role="status">{message}</div>}
-    {records===null&&!error?<p className="waiting-message"><BrandSpinner decorative/> Back-ups laden…</p>:<>
+    {records===null?(loading?<p className="waiting-message"><BrandSpinner decorative/> Back-ups laden…</p>:<><p>De beschikbare back-ups konden niet worden geladen. Probeer het opnieuw.</p><Button onClick={retry}>Opnieuw laden</Button></>):<>
       <h3>Wilt u een back-up terugzetten?</h3>
       <p>Herstel leveranciers, prijzen, categorieën, bedrijven, extra velden, prijshistorie en appinstellingen. Uw beheerderstoegang blijft behouden.</p>
       <label className="backup-choice" htmlFor="backup-choice">Beschikbare back-ups ({records?.length||0} van 7)<select id="backup-choice" disabled={busy||!records?.length} value={selected} onChange={e=>{setSelected(e.target.value);setConfirmed(false);setMessage('')}}><option value="">Kies een back-up…</option>{records?.map(r=><option key={r.id} value={r.id}>{date(r.created_at)} · {kinds[r.kind]||r.kind}</option>)}</select></label>

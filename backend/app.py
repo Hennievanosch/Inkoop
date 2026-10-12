@@ -838,7 +838,7 @@ def uploaded_table(content,filename):
     if filename.lower().endswith('.xlsx'):
         try:
             w=load_workbook(io.BytesIO(content),data_only=True,read_only=True)
-            s=w['Blad1'] if 'Blad1' in w.sheetnames else w.active
+            s=w['Leveranciers'] if 'Leveranciers' in w.sheetnames else w['Blad1'] if 'Blad1' in w.sheetnames else w.active
             rows=[[str(x) if x is not None else '' for x in r] for r in s.values]
             # Extra category/field metadata in own exports remains separate from product rows.
             category_names=[str(r[0]).strip() for r in w['Blad3'].values if norm(r[0])] if 'Blad3' in w.sheetnames else []
@@ -1084,8 +1084,14 @@ def product_totals_table(rows, suppliers, companies):
 
 @app.post('/api/export')
 def export(body:dict,u=Depends(admin)):
-    with db() as c:state,revision=read_state(c)
     fmt=body.get('format','xlsx');ids=body.get('ids')
+    with db() as c:
+        c.execute('BEGIN IMMEDIATE');u=check_admin(c,u)
+        state,revision=read_state(c)
+        report=None
+        if fmt=='xlsx' and body.get('scope') not in ['prices','product_totals']:
+            from backend.reporting import report_data
+            report=report_data(c,state,revision,u,body.get('company_id') or '')
     rows=state['rows'] if ids is None else [r for r in state['rows'] if r['id'] in ids]
     price_headers=['Totaalprijs (€) - '+co['name'] for co in state['companies']]
     selected_supplier_ids={r['supplier_id'] for r in rows}
@@ -1126,6 +1132,8 @@ def export(body:dict,u=Depends(admin)):
         summary=w.create_sheet('Opgetelde prijzen');summary.append([safe_cell(h) for h in calculated_headers])
         for row in calculated_rows:summary.append([safe_cell(value) for value in row])
         summary.freeze_panes='D2';summary.auto_filter.ref=summary.dimensions
+        from backend.dashboard_export import add_dashboard
+        add_dashboard(w,state,rows,report,filtered=ids is not None)
     buf=io.BytesIO();w.save(buf)
     return Response(buf.getvalue(),media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':f'attachment; filename="{filename}.xlsx"'})
 

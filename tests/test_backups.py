@@ -37,6 +37,22 @@ class BackupTests(unittest.TestCase):
         self.assertEqual([r['id'] for r in listing['backups']],list(reversed(ids[2:])))
         self.assertNotIn('payload',response.text);self.assertNotIn('checksum',response.text)
 
+    def test_completion_settings_with_sql_wildcards_survive_snapshot_restore(self):
+        # Run against SQLite and PostgreSQL: an empty parameter tuple made the
+        # PostgreSQL driver interpret the LIKE wildcard as a placeholder.
+        key='completion:quarter:2027-Q1:test-company';value='{"confirmed":true,"note":"25%"}'
+        with db() as c:
+            c.execute('INSERT INTO settings VALUES(?,?)',(key,value))
+            stored=c.execute("SELECT key FROM settings WHERE key LIKE 'completion:%' AND value=?",(value,)).fetchall()
+            self.assertEqual([r['key'] for r in stored],[key])
+        backup_id=self.create()
+        with db() as c:c.execute('UPDATE settings SET value=? WHERE key=?',('{"confirmed":false}',key))
+        response=self.client.post('/api/backups/'+backup_id+'/restore',json={'revision':self.get()['revision'],'confirmed':True})
+        self.assertEqual(response.status_code,200,response.text)
+        with db() as c:
+            restored=c.execute("SELECT key,value FROM settings WHERE key LIKE 'completion:%'").fetchall()
+            self.assertEqual([dict(r) for r in restored],[{'key':key,'value':value}])
+
     def test_first_day_is_once_per_month_even_after_rotation_and_uses_amsterdam_date(self):
         with patch.dict('os.environ',{'CRON_SECRET':''}):
             with patch('backend.backups.datetime',clock('2026-11-02')):
