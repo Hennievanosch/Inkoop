@@ -1,0 +1,118 @@
+# TVE GROUP — Leveranciersbeheer
+
+Een Nederlandstalige webapp met React, FastAPI en duurzame databaseopslag. Lokaal gebruikt de app SQLite; op Vercel gebruikt hij uitsluitend Supabase/PostgreSQL. De echte bijgevoegde Excel is opgenomen als `data/startgegevens.xlsx`.
+
+Het zijmenu en het inlogscherm gebruiken een webversie van het door de eigenaar aangeleverde TVE GROUP-logo, met de gekleurde cirkel en de tekst **VISUALIZING YOUR WORLD**. De afbeelding staat in `frontend/src/assets/tve-group-logo.png` en wordt met de app meegeleverd; de browser hoeft hiervoor geen externe website te openen.
+
+## Vercel en Supabase
+
+De werkende app staat op **https://tve-leveranciers.vercel.app**. Hosting: uw Vercel-project [tve-leveranciers](https://vercel.com/hennie3/tve-leveranciers), account hennie-8113, team Hennie. Opslag: uw bestaande [Supabase-project](https://supabase.com/dashboard/project/fvatxgsyvobgyainkzpa), regio eu-west-1. Het echte startbestand bevat 63 productregels en 56 unieke leveranciers. Uw eigen wijzigingen worden duurzaam in Supabase bewaard en blijven behouden bij publicatie van updates.
+
+**Eerste keer openen:** download het privé-openingsbestand `/workspace/TVE-app-openen.html`, open het in uw browser en klik **App openen en account aanmaken**. Kies uw eigen e-mailadres en een wachtwoord van minstens 12 tekens. Daarna gebruikt u de gewone app-URL. Deel dit privébestand niet. U kunt de eenmalige code ook in uw eigen [Vercel-omgevingsvariabelen](https://vercel.com/hennie3/tve-leveranciers/settings/environment-variables) onder `TVE_SETUP_CODE` bekijken en op het openingsscherm invullen. Na accountaanmaak is deze code niet meer bruikbaar.
+
+De accounts zijn gekoppeld via de officiële Vercel-aanmelding en een uitsluitend in de browser versleutelde Supabase-koppeling. Het tijdelijke koppelingsformulier is vervangen door de leveranciersapp. Supabase en Vercel hoeven niet opnieuw te worden aangemeld om de app te gebruiken. Voor beheer/deployments is Supabase Management API-toegang nodig; de app zelf gebruikt alleen zijn eigen beperkte database-role `tve_backend`. Het bestaande postgres-wachtwoord is niet gewijzigd. Een extra Vercel-token is niet nodig zolang de officiële CLI-aanmelding geldig is; het deploymentscript vernieuwt een verlopen OAuth-sessie via de CLI.
+
+De beheerder kan een volgende deployment vanuit deze checkout uitvoeren met veilig ingestelde `SUPABASE_ACCESS_TOKEN`:
+
+```bash
+.venv/bin/python scripts/deploy_cloud.py --deploy
+```
+
+Dit hergebruikt het gekoppelde Supabase-project, stelt de databaseverbinding als versleutelde Vercel-variabele in en deployt de app. De eenmalige migratie wordt daarna overgeslagen. Voor een eerste koppeling kan `--supabase-project <ref>` een toegankelijk bestaand project selecteren, ook met een token dat geen organisatierechten heeft. Zonder gekoppeld project kan het script een eigen project in Frankfurt aanmaken; bij meerdere organisaties kiest de beheerder bewust met `--supabase-org`. Een bestaande doeldatabase met afwijkende gegevens wordt nooit overschreven. De reeds ontvangen versleutelde koppeling kan met de omgevings-Python worden gebruikt: `python scripts/load_supabase_connection.py <bestand> --supabase-project fvatxgsyvobgyainkzpa`. Het leesbare token blijft uitsluitend in geheugen en wordt niet gelogd.
+
+De bevestigde app-URL komt in `.deployment/status.json`. Open die URL en maak uw beheerdersaccount aan met de eenmalige privé-openingslink via `python scripts/opening_link.py <app-URL>`. U kunt de eenmalige code ook in uw eigen Vercel-project onder **Settings → Environment Variables → TVE_SETUP_CODE** bekijken en invullen op het openingsscherm. Na accountaanmaak heeft deze code geen toegang meer. Alle leveranciersgegevens vereisen inloggen. De Supabase-databaseverbinding blijft op de backend; de gegevens staan in het private schema `tve`, buiten de publieke Data API.
+
+Bij een nieuwe deployment blijven de Supabase-gegevens staan; dit is met wijzigingen, extra velden en een actieve sessie daadwerkelijk online getest. Ook uploadvoorvertoningen en tijdelijke bestandsoverdracht staan in de database en werken over meerdere Vercel-instanties. Import, export en back-ups worden via kleine bestandsdelen overgedragen, zodat Vercel's limiet per verzoek of antwoord de volledige back-up niet afbreekt. De online schermen, handelingen en responsive weergave zijn getest; zie `VALIDATIE.md`.
+
+## Starten en openen
+
+Vereist: Python 3.12+ en Node.js 22.12+ (de cloudomgeving gebruikt Python 3.12 en Node 24).
+
+```bash
+cd /workspace/Inkoop
+bash scripts/install.sh
+bash scripts/start.sh
+```
+
+De lokale server gebruikt poort **8000** voor ontwikkeling. De daadwerkelijk gepubliceerde app opent u via **https://tve-leveranciers.vercel.app**; er is geen localhost-previewlink nodig.
+
+Bij de eerste keer openen maakt u uw eigen beheerdersaccount aan. De eenmalige, privé-openingslink wordt alleen op uw eigen terminal getoond met:
+
+```bash
+python scripts/opening_link.py
+# Voor een HTTPS-host: geef uw daadwerkelijke basis-URL mee als argument.
+```
+
+De openingscode staat in het niet in Git opgenomen bestand `data/tve.token`. Na het aanmaken van het account wordt dat bestand verwijderd. Gebruik een wachtwoord van minstens 12 tekens. Deel de openingslink niet. Voor alle gegevens-API’s is inloggen verplicht; de sessie verloopt na twaalf uur. Wachtwoorden worden met scrypt gehasht. Er worden geen standaardwachtwoorden aangemaakt.
+
+## Mensen uitnodigen en bedrijfsrechten
+
+1. Open https://tve-leveranciers.vercel.app, vernieuw de pagina en log in als beheerder.
+2. Ga naar **Gebruikers → Gebruiker uitnodigen**. Vul het e-mailadres in en eventueel de naam.
+3. Kies **Bedrijfsgebruiker** en vink het juiste bedrijf aan. Meerdere bedrijven zijn mogelijk. Een **Beheerder** krijgt toegang tot alle gegevens en gebruikersbeheer.
+4. Klik **Uitnodigingslink maken → Link kopiëren**. Stuur de link zelf per e-mail of bericht; de app verstuurt geen automatische e-mails.
+5. De ontvanger opent de link binnen zeven dagen, kiest een eigen wachtwoord van minstens twaalf tekens en bevestigt dat wachtwoord. Na **Account activeren** is het persoonlijke account ingelogd. Een uitnodigingslink werkt één keer.
+6. Via **Bewerk toegang** kunt u bedrijven aanpassen of **Toegang actief** uitzetten. Bestaande sessies worden dan direct ongeldig; open schermen vragen bij hun volgende controle opnieuw om inloggen. Uw eigen beheerderstoegang kan niet worden uitgeschakeld.
+7. Een openstaande uitnodiging kunt u intrekken of via **Nieuwe link maken** vervangen. De eerdere link wordt dan ongeldig. De app weigert een verouderde wijziging wanneer een andere beheerder de toegang of uitnodiging al heeft gewijzigd.
+
+Bedrijfsgebruikers zien alleen leveranciersregels die aan hun bedrijven gekoppeld zijn of al een productprijs voor die bedrijven hebben. Zij zien uitsluitend de bijbehorende bedrijfsprijzen en kunnen alleen die productprijzen wijzigen. Hun prijsoverzicht en opgetelde totalen bevatten dezelfde selectie. Leveranciers, producten, categorieën en bedrijfskoppelingen worden door de beheerder onderhouden; import/export, back-ups, wijzigingsgeschiedenis en gebruikersbeheer zijn voor beheerders. Koppel een leverancier eerst via **Details** aan het bedrijf als die nog ontbreekt bij de bedrijfsgebruiker.
+
+Het bestaande beheerdersaccount, wachtwoord en sessies blijven behouden bij deze uitbreiding. Persoonlijke accounts, rollen, toewijzingen, uitnodigingen en hun geschiedenis staan duurzaam in private Supabase-tabellen. Alleen de hash van een uitnodigingstoken wordt bewaard; de volledige link wordt uitsluitend getoond bij het maken. De JSON-back-up blijft een back-up van de leveranciersgegevens en bevat geen wachtwoorden of accounts. Herstel wijzigt de bestaande accounts niet en weigert een toestand waarin een bedrijf met actieve gebruikerstoegang ontbreekt. De SQLite-naar-Supabase-migratie behoudt ook persoonlijke rollen en uitnodigingen. Wachtwoordherstel per e-mail is niet beschikbaar.
+
+## Werken met de app
+
+- **Dashboard:** totalen en grafieken reageren op uw filters. Klik op een staaf, donutsegment, legenda of matrixcel om de bijbehorende productregels te bekijken. Eén leverancier kan in meerdere categorieën en bedrijven meetellen; groepsaantallen zijn niet optelbaar. De verdeling telt de vereniging van bedrijfskoppelingen over de geselecteerde productregels per leverancier. Zonder filters toont de bedrijfsteller alle ingestelde bedrijven; met filters de bedrijven in de geselecteerde regels.
+- **Leveranciers → Prijzen per product:** kies bij **Prijzen invoeren voor** het bedrijf, bijvoorbeeld TVE of FORTY FIVE. Vul de eigen prijs van dat bedrijf per leverancier en product in; Enter of het verlaten van de cel slaat op. Elk product en elk bedrijf heeft een apart bedrag. Klik op de leveranciersnaam voor alle producten en alle bedrijfsprijzen naast elkaar, of gebruik **Alle prijzen per leverancier** en kies een leverancier. Dit overzicht toont altijd alle producten en bedrijven, ongeacht hoofdschermfilters. Onder de productregels staan de opgetelde prijzen per bedrijf; daaronder staat het totaal van alle bedrijfsprijzen voor de leverancier. De eigen Excel-export bevat de productregels en het tabblad **Opgetelde prijzen**. U kunt ook hier bedragen bewerken. Op mobiel schuiven de bedrijfskolommen horizontaal terwijl de productkolom zichtbaar blijft. Via **Details** opent u het productformulier, met eigen prijsvelden voor alle bedrijven. Een leeg invoerveld wist alleen die prijs; `0,00` blijft een ingevulde prijs. Eerdere prijzen zonder bedrijf blijven beschikbaar bij **Algemene prijs (eerder ingevuld)**; ze worden niet automatisch verdeeld. Bedragen zijn in euro met twee decimalen, zonder vastgelegde btw-status of eenheid.
+- **Uitgebreid leveranciersoverzicht:** via een grafiek op het Dashboard opent u de tabel met categorieën, bedrijfskoppelingen, productprijzen, extra velden en gezamenlijke wijzigingen. Een categorie kiezen of een bedrijfsvinkje wijzigen slaat direct op. Via **Extra velden** kunt u extra cellen bewerken. Klik op een leveranciersnaam of het menu rechts voor het detailformulier. De knop **Productregels** is verwijderd uit de prijstabbladen.
+- **Leveranciers → Totaalprijzen per bedrijf:** standaard verschijnt **Opgetelde productprijzen**, met één regel per leverancier, de som per bedrijf en een totaal van de bedrijfsprijzen samen. Deze bedragen worden automatisch berekend uit de ingevulde productprijzen, met exacte centen, en reageren direct op wijzigingen en filters. Lege prijzen dragen niets bij; een ingevuld nulbedrag blijft een nulbedrag. Klik op de leverancier om diens producten te bewerken. **Prijzen Excel / Prijzen CSV** exporteert de berekende totalen van de huidige selectie. Bij **Handmatige totaalprijzen** blijven de eerder afzonderlijk ingevoerde leverancierstotalen beschikbaar en bewerkbaar; deze bedragen worden apart bewaard. Algemene productprijzen zonder bedrijf verschijnen, waar ingevuld, in een eigen somkolom.
+- **Leverancier beheren:** het potlood naast de naam hernoemt de leverancier op alle productregels. Bij mogelijke dubbelen kiest u zelf tussen afzonderlijk bewaren en samenvoegen. Samenvoegen behoudt alle productregels apart. Leveranciers verwijderen verplaatst hun regels naar de prullenbak.
+- **Prijzen bij hernoemen, samenvoegen en verwijderen:** bedragen gebruiken de vaste leverancier- en bedrijf-ID's. Hernoemen behoudt de prijzen. Bij samenvoegen kiest u per bedrijf tussen verschillende bestaande bedragen; de app telt ze niet automatisch op. Een bedrijf met prijzen kan alleen worden verwijderd met opnieuw toewijzen. Als de leverancier al een andere prijs voor het doelbedrijf heeft, past of wist u eerst één bedrag; de app overschrijft niets. Een verwijderde leverancier herstellen brengt ook zijn prijzen terug; een bestaande leverancier behoudt zijn recentere prijzen bij het herstellen van een oude productregel.
+- **Gezamenlijk wijzigen:** selecteer regels, eventueel alle gefilterde regels, en kies de velden die u wilt aanpassen. Niet gekozen velden blijven behouden.
+- **Categorieën / Bedrijven:** toevoegen, hernoemen en verwijderen. Bij bestaande koppelingen is opnieuw toewijzen verplicht. Hernoemen behoudt de ID en alle koppelingen. Extra velddefinities beheert u via **Uitgebreid leveranciersoverzicht → Velden beheren**: tekst, getal, datum en keuzelijst. Ongeldige waarden worden geweigerd.
+- **Opslag:** rechtsboven staat of opslaan bezig, voltooid of mislukt is. Een conflicterende versie wordt geweigerd met een melding; invoer wordt niet stilzwijgend overschreven. De app ververst wijzigingen uit andere sessies iedere vijftien seconden. Open een formulier opnieuw na een conflict om de nieuwste versie te gebruiken.
+- **Geschiedenis & herstel:** het zijmenu toont de volledige wijzigingsgeschiedenis in pagina’s van honderd wijzigingen. Herstel uit de prullenbak brengt een productregel en zijn koppelingen terug. Een geschiedenis-herstel zet de volledige leveranciersgegevens terug naar vóór de gekozen wijziging; daarvoor wordt expliciet gewaarschuwd. Ook die herstelactie blijft in de geschiedenis staan.
+
+## Import, export en back-ups
+
+1. Ga naar **Import / export** en kies een `.xlsx`- of UTF-8-`.csv`-bestand (maximaal 10 MB, 20.000 regels en 200 kolommen). Excel gebruikt Blad1 als dat aanwezig is, anders het eerste actieve werkblad. De eerste niet-lege regel is de kopregel. CSV herkent puntkomma, komma of tab.
+2. Wijs leverancier, productcategorie, bedrijfskolommen en extra velden toe. X/x betekent gekoppeld; lege waarden betekenen niet gekoppeld. Ook ja/nee, 1/0 en true/false worden ondersteund voor nieuwe imports. De oorspronkelijke lege tussenkolommen worden genegeerd.
+3. Kies **Toevoegen** om alle nieuwe productregels te behouden, of **Bijwerken** om bestaande regels bij te werken. Bijwerken gebruikt eerst Regel-ID en anders leverancier + categorie. Als dat meerdere regels oplevert, kiest u de doelregel. Niet toegewezen kolommen blijven bij bijwerken behouden.
+4. Open de voorvertoning. Beoordeel mogelijke dubbelen per regel: bestaande leverancier, afzonderlijke leverancier of overslaan. Exacte namen krijgen een zichtbare suggestie die u kunt aanpassen. Bij een nieuwe afzonderlijke leverancier worden regels met dezelfde genormaliseerde nieuwe naam bij die nieuwe leverancier ondergebracht, maar productregels blijven apart.
+5. Klik **Import bevestigen**. Fouten worden met concrete regelnummers gerapporteerd; een foutieve import wordt als geheel niet toegepast. Het verslag toont toegevoegd, bijgewerkt, overgeslagen en fouten. Een import wordt geweigerd als de database sinds de voorvertoning is gewijzigd.
+
+**Excel en CSV exporteren:** alle gegevens of de huidige gefilterde selectie. Exports bevatten vaste Regel-ID’s en Leverancier-ID’s, alle bedrijven en extra veldwaarden. Excel bevat ook de categorie-keuzelijst en extra velddefinities (inclusief keuzelijstopties). CSV bevat alleen tabulaire waarden; velddefinities worden hiermee niet overgedragen. Gebruik een volledige back-up om alle instellingen over te dragen. Nieuw aangeleverde bedrijfskolommen of extra CSV-velden maakt u eerst aan in de app, waarna u ze bij import kunt toewijzen.
+
+**Productprijzen exporteren en importeren:** gewone Excel- en CSV-exports bevatten `Productnaam`, `Prijs (€)` voor eerdere algemene prijzen en aparte kolommen `Prijs (€) - TVE`, `Prijs (€) - FORTY FIVE`, enzovoort. Bij import wijst u naast leverancier en categorie de gewenste productprijskolommen toe. Productprijzen per bedrijf zijn onafhankelijk van de bedrijfsvinkjes en van de leverancierstotaalprijzen. Verschillende producten binnen dezelfde categorie worden bij bijwerken eerst op Regel-ID herkend; zonder Regel-ID helpen specifieke productnamen om de juiste regel te vinden. De voorvertoning toont alle ingevoerde bedrijfsprijzen; het importverslag telt gewijzigde productprijzen per bedrijf apart. Een niet toegewezen of lege prijscel behoudt de bestaande prijs; wissen doet u in de app. Ongeldige bedragen blokkeren de gehele import. Productnamen en alle prijzen zitten ook in volledige back-ups, prullenbakherstel en wijzigingsgeschiedenis; oudere back-ups blijven leesbaar. Bij hernoemen blijven bedragen via stabiele ID’s behouden. Bij een bedrijf verwijderen is opnieuw toewijzen verplicht als er prijzen bestaan; verschillende bedragen op dezelfde doelcel worden geweigerd.
+
+**Berekende totalen exporteren:** het Excel-tabblad **Opgetelde prijzen** bevat één regel per leverancier, `Som productprijzen (€) - TVE` en de andere bedrijven, `Totaal bedrijfsprijzen (€)` en `Som algemene productprijzen (€)`. Het scherm met opgetelde totalen exporteert dezelfde sommen naar Excel/CSV en respecteert de selectie van producten en bedrijven. Dit zijn berekende overzichten; wijzig of importeer de onderliggende productprijzen om de totalen aan te passen. Berekende totalen worden niet als extra prijzen in de database opgeslagen.
+
+**Prijzen exporteren en importeren:** gewone exports bevatten kolommen `Totaalprijs (€) - TVE`, enzovoort. Dit is dezelfde leverancierstotaalprijs op iedere productregel van die leverancier: tel deze herhaalde bedragen niet op. Excel bevat daarnaast het werkblad **Totaalprijzen**, met iedere leverancier één keer. Via **Leveranciers → Totaalprijzen per bedrijf → Handmatige totaalprijzen → Prijzen Excel / Prijzen CSV** exporteert u een apart prijzenbestand van de zichtbare leveranciers, ook als ze geen actieve productregels hebben. Zo'n bestand importeert u via **Import / export**, met leverancier en prijskolommen toegewezen; een productcategorie is dan niet nodig. De voorvertoning toont de nieuwe bedragen en de bestaande prijzen die veranderen. Lege prijscellen behouden bestaande prijzen, en niet toegewezen prijskolommen blijven behouden. Verschillende niet-lege bedragen voor dezelfde leverancier en hetzelfde bedrijf binnen één import geven een concrete fout: kies één bedrag of sla de tegenstrijdige regel over. Bevestiging is nodig voordat prijzen veranderen. Het importverslag telt gewijzigde totaalprijzen apart. Back-ups bevatten ook alle prijzen en prijswijzigingen; oude back-ups zonder prijzen blijven leesbaar.
+
+**Volledige back-up:** kies **Back-up maken** voor een JSON-bestand met alle gegevens, stabiele ID’s, extra velddefinities, koppelingen, geschiedenis en prullenbak. Inloggegevens en sessies worden niet geëxporteerd. Bewaar dit bestand op een veilige plaats. **Back-up herstellen** toont eerst aantallen en vraagt vervolgens bevestiging voordat de huidige gegevens worden vervangen. De huidige toestand blijft in de wijzigingsgeschiedenis staan. Een back-up mag maximaal 50 MB zijn.
+
+## Importcontrole
+
+De startimport controleert expliciet **63 leveranciersregels** en **56 unieke leveranciersnamen**, genormaliseerd op hoofdletters en omliggende spaties. Iedere oorspronkelijke productregel en iedere koppeling uit C/E/G/I/K blijft behouden. Er zijn **35 categorieën in gebruik**, **39 beschikbare categorieën** na aanvulling van Blad3 en **5 bedrijven**. Het bronbestand is nooit aangepast. Het wordt alleen bij het aanmaken van een nieuwe database ingelezen. Een herstart, nieuwe build of herhaalde installatie overschrijft bestaande data niet.
+
+## Duurzame opslag en hosting
+
+De database staat in `data/tve.sqlite` (met SQLite WAL-bestanden). U kunt `TVE_DB_PATH` op een **duurzame schijf** zetten. Verwijder deze bestanden niet bij een nieuwe release. Gebruik de JSON-export voor een consistente back-up; kopieer een actieve SQLite-database niet zonder zijn WAL of een SQLite-back-upoperatie. Tijdelijke testdatabases worden apart aangemaakt.
+
+Vercel gebruikt de externe Supabase-database; lokale databasebestanden zijn daar bewust niet toegestaan. PostgreSQL-transacties en een databasevergrendeling beschermen gelijktijdige wijzigingen door meerdere backend-instanties, samen met de revisiecontrole. TLS controleert het certificaat en de hostnaam met `verify-full`. De backend gebruikt de officiële CA `https://supabase-downloads.s3.amazonaws.com/prod/ssl/prod-ca-2021.crt`, over certificaatgevalideerde HTTPS gedownload en per proces gecachet. Een meegeleverd `supabase/prod-ca-2021.crt` of expliciete `TVE_DATABASE_CA` kan de download vervangen. De runtime-role bezit alleen het private app-schema en hoeft geen nieuwe schema's te kunnen aanmaken. Lokaal blijft SQLite ondersteund. De backend beschermt alle leveranciersgegevens met inloggen, origin-controle, HttpOnly/SameSite-cookies, CSP en begrenzing van mislukte inlogpogingen. Laat een eigen HTTPS-reverseproxy `X-Forwarded-Proto: https` zetten; dan worden sessiecookies als Secure aangemaakt. Er zijn persoonlijke accounts met beheerdersrollen of toegang tot specifieke bedrijven. Gebruikersbeheer en uitnodigingslinks zijn beschikbaar. De app verstuurt geen e-mail; wachtwoordherstel per e-mail is niet beschikbaar.
+
+Na het publiceren van de **cloudomgeving** moet de server opnieuw worden gestart; een omgevingssnapshot publiceert de webapp niet automatisch op het internet. De herbruikbare installatie- en startinstructies zijn in het configuratieconcept opgeslagen. Publiceren en een daadwerkelijke nieuwe cloudtaak zijn afzonderlijke handelingen en zijn nog niet getest.
+
+## Ontwikkelen en controleren
+
+```bash
+# Backend + gebouwde interface
+bash scripts/start.sh
+# Optioneel: Vite met hot reload (API-proxy naar poort 8000)
+npm --prefix frontend run dev
+# API-integratietests, eigen tijdelijke database
+.venv/bin/python -m unittest discover -s tests -v
+# Volledige browsertest, met Playwright en /usr/bin/chromium
+python tests/browser_check.py
+```
+
+De browsertest gebruikt een vrije lokale poort en tijdelijke gegevens, maakt screenshots onder `test-results/` en stopt alleen zijn eigen testserver. De tests controleren de echte Excel-import, meerdere producten, CRUD, categorieën/bedrijven, veldtypes, gezamenlijke wijzigingen, dubbelen, export/herimport, prullenbak, back-up, inloggen, conflictbeveiliging, grafiekfilters en een daadwerkelijke serverherstart. Gebruik de bestaande checkout; cloudtaken zijn al geïsoleerd en vragen geen extra Git-worktree.

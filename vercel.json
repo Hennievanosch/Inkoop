@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": ["backend/**", "data/startgegevens.xlsx", "supabase/schema.sql"],
+        "excludeFiles": [".git/**", ".deployment/**", ".vercel/**", ".venv/**", ".cache/**", "tests/**", "test-results/**", "scripts/**", "frontend/**", "**/__pycache__/**", "data/*.sqlite*", "data/*.token", "data/*.log", "data/*.pid", ".env*", "README.md", "VALIDATIE.md"]
+      }
+    },
+    {"src": "frontend/package.json", "use": "@vercel/static-build", "config": {"distDir": "dist"}}
+  ],
+  "routes": [
+    {"src": "/(.*)", "headers": {"Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'", "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer"}, "continue": true},
+    {"src": "/api/(.*)", "dest": "/api/index.py"},
+    {"src": "/assets/(.*)", "dest": "/frontend/assets/$1"},
+    {"handle": "filesystem"},
+    {"src": "/(.*)", "dest": "/frontend/index.html"}
+  ],
+  "regions": ["fra1"]
+}
