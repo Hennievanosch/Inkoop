@@ -19,5 +19,6 @@
     {"handle": "filesystem"},
     {"src": "/(.*)", "dest": "/frontend/index.html"}
   ],
+  "crons": [{"path": "/api/reminders", "schedule": "0 7 * * *"}],
   "regions": ["fra1"]
 }

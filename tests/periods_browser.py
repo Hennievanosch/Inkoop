@@ -1,0 +1,62 @@
+"""Verify the new dashboard and complete product list against disposable data."""
+import os
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+import httpx
+from playwright.sync_api import sync_playwright, expect
+
+ROOT=Path(__file__).resolve().parent.parent
+with socket.socket() as sock:
+    sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+base=f'http://127.0.0.1:{port}'
+with tempfile.TemporaryDirectory(prefix='tve-period-browser-') as folder:
+    env={**os.environ,'TVE_DB_PATH':str(Path(folder)/'browser.sqlite')}
+    for key in ['VERCEL','SUPABASE_DB_URL','DATABASE_URL']:env.pop(key,None)
+    with open(Path(folder)/'server.log','w') as log:
+        process=subprocess.Popen([sys.executable,'-m','uvicorn','backend.app:app','--host','127.0.0.1','--port',str(port)],cwd=ROOT,env=env,stdout=log,stderr=log)
+        try:
+            for _ in range(100):
+                try:
+                    if httpx.get(base+'/api/health').is_success:break
+                except httpx.HTTPError:pass
+                time.sleep(.1)
+            with sync_playwright() as p:
+                browser=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
+                page=browser.new_page(viewport={'width':1440,'height':1100});errors=[]
+                page.on('pageerror',lambda error:errors.append(str(error)))
+                page.goto(base+'/#setup='+Path(folder,'browser.token').read_text().strip())
+                page.get_by_label('E-mailadres',exact=True).fill('period@example.test')
+                page.get_by_label('Wachtwoord (minstens 12 tekens)',exact=True).fill('isolated-period-password')
+                page.get_by_role('button',name='Account aanmaken',exact=True).click()
+                expect(page.get_by_role('heading',name='Bedrijfsvergelijking',exact=True)).to_be_visible()
+                expect(page.get_by_role('heading',name='Vergelijking voor de hele groep',exact=True)).to_be_visible()
+                expect(page.locator('.period-bars').first.locator('.period-bar')).to_have_count(7)
+                expect(page.get_by_role('button',name='Invoer voor deze periode bevestigen')).to_be_disabled()
+                page.get_by_text('Invoerperiode en herinneringen instellen',exact=True).click()
+                expect(page.get_by_label('Periode',exact=True)).to_have_value('quarter')
+                expect(page.get_by_label('Deadline in de laatste maand')).to_have_value('day25')
+                page.get_by_label('Periode',exact=True).select_option('month')
+                page.get_by_role('button',name='Instellingen opslaan').click()
+                expect(page.get_by_role('heading',name='Prijsinvoer',exact=False)).to_contain_text('-10')
+                (ROOT/'test-results').mkdir(exist_ok=True)
+                page.screenshot(path=str(ROOT/'test-results/period-dashboard.png'),full_page=True)
+                page.get_by_role('button',name='Leveranciers',exact=True).click()
+                expect(page.locator('.product-prices-table tbody tr')).to_have_count(63)
+                expect(page.get_by_label('Producten per pagina')).to_have_count(0)
+                price=page.locator('.product-prices-table tbody tr').first.locator('.price-input input')
+                price.fill('12,34');price.press('Enter')
+                expect(page.locator('.product-prices-table tbody tr').first).to_contain_text('Ingevoerd:')
+                page.set_viewport_size({'width':390,'height':844})
+                page.get_by_role('button',name='Menu openen',exact=True).click()
+                page.get_by_role('button',name='Dashboard',exact=True).click()
+                expect(page.get_by_role('heading',name='Bedrijfsvergelijking',exact=True)).to_be_visible()
+                page.screenshot(path=str(ROOT/'test-results/period-dashboard-mobile.png'),full_page=True)
+                assert not errors,errors
+                browser.close()
+                print('Browser OK: periods, group comparison, config save, 63 products, entry date and mobile dashboard')
+        finally:
+            process.terminate();process.wait(timeout=10)

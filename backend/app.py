@@ -188,6 +188,8 @@ def scoped_state(state,u):
     for row in state['rows']:
         row['company_ids']=[key for key in row['company_ids'] if key in allowed]
         row['company_prices']={key:value for key,value in row.get('company_prices',{}).items() if key in allowed}
+        row['price_entered_at']={key:value for key,value in row.get('price_entered_at',{}).items() if key in allowed}
+        row.pop('updated_by',None)
         row.pop('price',None)
     supplier_ids={row['supplier_id'] for row in state['rows']}
     state['suppliers']=[supplier for supplier in state['suppliers'] if supplier['id'] in supplier_ids]
@@ -540,7 +542,7 @@ def validate_state(state):
                 raise HTTPException(422,'Ongeldige veldwaarde.')
 
 
-def save(c, before, state, revision, actor, label):
+def save(c, before, state, revision, actor, label, record_dates=True):
     validate_prices(state)
     for supplier in state['suppliers']:
         if 'prices' in supplier:
@@ -550,6 +552,21 @@ def save(c, before, state, revision, actor, label):
         update_company_prices(state, row, deepcopy(row.get('company_prices', {})))
         if isinstance(row.get('values'), dict):
             row['values'] = {key: value for key, value in row['values'].items() if value is not None and value != ''}
+    if record_dates:
+        timestamp = now()
+        old_rows = {row['id']: row for row in before['rows']}
+        for row in state['rows']:
+            old = old_rows.get(row['id'])
+            if old is None:
+                row['created_at'] = timestamp
+            if old != row:
+                row['updated_at'] = timestamp
+                row['updated_by'] = actor
+            if row.get('price') is not None and (old is None or old.get('price') != row.get('price')):
+                row.setdefault('price_entered_at', {})['general'] = timestamp
+            for company_id, amount in row.get('company_prices', {}).items():
+                if old is None or old.get('company_prices', {}).get(company_id) != amount:
+                    row.setdefault('price_entered_at', {})[company_id] = timestamp
     validate_state(state)
     company_ids={company['id'] for company in state['companies']}
     for access in c.execute("SELECT company_ids FROM user_access WHERE role='company' AND active=1"):
@@ -769,7 +786,7 @@ def action(body:dict,u=Depends(user)):
             if not record:raise HTTPException(404,'Wijziging niet gevonden.')
             state=json.loads(record['before_data']);label='Gegevens teruggezet naar vóór: '+record['label']
         else:raise HTTPException(422,'Onbekende bewerking.')
-        result=save(c,before,state,revision,u['email'],label)
+        result=save(c,before,state,revision,u['email'],label,record_dates=op not in ['history_restore','trash_restore'])
         result['state']=scoped_state(result['state'],u);result['user']=u
         return result
 
@@ -1118,7 +1135,7 @@ def backup_restore(body:dict,u=Depends(admin)):
         c.execute('BEGIN IMMEDIATE');u=check_admin(c,u);before,revision=read_state(c);check_revision(body,revision)
         data=import_table(c,body.get('token'),u)
         if data.get('format')!='tve-backup':raise HTTPException(422,'Onjuist herstelbestand.')
-        result=save(c,before,data['state'],revision,u['email'],'Volledige back-up hersteld')
+        result=save(c,before,data['state'],revision,u['email'],'Volledige back-up hersteld',record_dates=False)
         for record in data.get('history',[]):
             c.execute('INSERT OR IGNORE INTO audit(id,at,actor,label,before_data,after_data) VALUES(?,?,?,?,?,?)',tuple(record[k] for k in ['id','at','actor','label','before_data','after_data']))
         c.execute('DELETE FROM imports WHERE id=?',(body['token'],))
@@ -1214,6 +1231,9 @@ def cancel_transfer(token:str,u=Depends(admin)):
         delete_transfer(c,token,u)
     return {'cancelled':True}
 
+
+from backend.reporting import register as register_reporting
+register_reporting(app, db, user, admin, current_access, read_state, now, js, check_revision)
 
 DIST=ROOT/'frontend/dist'
 if DIST.exists():

@@ -114,6 +114,9 @@ class PostgresConnection:
             logging.getLogger(__name__).error('PostgreSQL schema: %s %s',error.sqlstate,error.diag.message_primary)
             raise RuntimeError('Het databaseschema kon niet worden gecontroleerd.') from None
 
+    def commit(self):
+        self.connection.commit()
+
 
 def connect():
     if IS_VERCEL and not IS_POSTGRES:
