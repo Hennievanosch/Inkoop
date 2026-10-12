@@ -57,6 +57,18 @@ class PeriodTests(unittest.TestCase):
         self.action('row_company_price',{'id':row['id'],'company_id':co,'price':'101'})
         self.assertEqual(self.client.get('/api/reporting?company_id='+co).json()['series'][-1]['total'],'101.00')
 
+    def test_comparison_includes_both_full_years_and_no_future_values(self):
+        class Clock(datetime):
+            @classmethod
+            def now(cls,tz=None):return datetime(2026,4,15,10,tzinfo=timezone.utc).astimezone(tz)
+        with patch('backend.reporting.datetime',Clock):
+            report=self.client.get('/api/reporting').json()
+        self.assertEqual([p['key'] for p in report['series']],[f'{year}-Q{q}' for year in [2025,2026] for q in range(1,5)])
+        self.assertEqual([p['key'] for p in report['series'] if p['current']],['2026-Q2'])
+        for p in report['series']:
+            if p['key'] in ['2026-Q3','2026-Q4']:
+                self.assertTrue(p['future']);self.assertIsNone(p['total']);self.assertIsNone(p['group_total'])
+
     def test_calendar_boundaries(self):
         self.assertEqual(period(date(2027,1,1)),(date(2027,1,1),date(2027,3,31),'2027-Q1'))
         self.assertEqual(period(date(2026,12,31))[2],'2026-Q4')
@@ -75,7 +87,7 @@ class PeriodTests(unittest.TestCase):
         self.assertEqual(report['series'][-1]['group_total'],'1011.00')
         self.assertNotIn(b,json.dumps(report))
         self.assertEqual(colleague.get('/api/reporting?company_id='+b).json()['series'][-1]['total'],'12.00')
-        self.assertEqual(len(report['series']),7);self.assertIsNone(report['series'][0]['total'])
+        self.assertEqual(len(report['series']),8);self.assertIsNone(report['series'][0]['total'])
         scoped=next(r for r in colleague.get('/api/state').json()['state']['rows'] if r['id']==row['id'])
         self.assertEqual(set(scoped['price_entered_at']),{a});self.assertNotIn('updated_by',scoped)
         self.assertEqual(colleague.post('/api/reporting/config',json={'frequency':'month','deadline':'day25','revision':self.get()['revision']}).status_code,403)

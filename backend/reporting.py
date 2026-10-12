@@ -72,21 +72,24 @@ def register(app, db, user, admin, current_access, read_state, now, js, check_re
                 personal_ids={selected}
             else:selected=''
             completion=valid_completion(c,u['id'],key,state,ids)
-            # Use audited end-of-period states; periods before the first audit remain unknown.
-            series=[]; cursor=start
-            for _ in range(7):
-                pstart,pend,pkey=period(cursor,cfg['frequency'])
-                cutoff=datetime.combine(min(pend,today)+timedelta(days=1),time.min,ZONE).astimezone(timezone.utc).isoformat()
-                audit=c.execute('SELECT after_data FROM audit WHERE at<? ORDER BY at DESC,rowid DESC LIMIT 1',(cutoff,)).fetchone()
-                snapshot=json.loads(audit['after_data']) if audit else None
-                if pkey==key:snapshot=state
-                mine=historical_total(snapshot,state,personal_ids,min(pend,today))
-                all_ids={co['id'] for co in state['companies']} | ({co['id'] for co in snapshot['companies']} if snapshot else set())
-                if pkey!=key:all_ids|={h['company_id'] for h in state.get('price_history',[]) if h['company_id']!='general'}
-                item={'key':pkey,'total':mine,'current':pkey==key}
-                # Only aggregated group totals are shared across company boundaries.
-                item['group_total']=historical_total(snapshot,state,all_ids,min(pend,today))
-                series.insert(0,item);cursor=pstart-timedelta(days=1)
+            # Compare complete calendar years by quarter, independent of the input deadline cadence.
+            series=[]
+            for year in [today.year-1,today.year]:
+                for quarter in range(1,5):
+                    pstart,pend,pkey=period(date(year,(quarter-1)*3+1,1),'quarter')
+                    future=pstart>today
+                    current=pstart<=today<=pend
+                    snapshot=None
+                    if not future:
+                        cutoff=datetime.combine(min(pend,today)+timedelta(days=1),time.min,ZONE).astimezone(timezone.utc).isoformat()
+                        audit=c.execute('SELECT after_data FROM audit WHERE at<? ORDER BY at DESC,rowid DESC LIMIT 1',(cutoff,)).fetchone()
+                        snapshot=json.loads(audit['after_data']) if audit else None
+                        if current:snapshot=state
+                    mine=None if future else historical_total(snapshot,state,personal_ids,min(pend,today))
+                    all_ids={co['id'] for co in state['companies']} | ({co['id'] for co in snapshot['companies']} if snapshot else set())
+                    if not current:all_ids|={h['company_id'] for h in state.get('price_history',[]) if h['company_id']!='general'}
+                    group=None if future else historical_total(snapshot,state,all_ids,min(pend,today))
+                    series.append({'key':pkey,'total':mine,'group_total':group,'current':current,'future':future})
             due=deadline(end,cfg['deadline'])
             return {'companies':state['companies'] if u['role']=='admin' else [],'selected_company':selected,'config':cfg,'revision':revision,'period':key,'deadline':due.isoformat(),'overdue':today>due,'completion':completion,'coverage':completeness(state,ids),'series':series,'mail_ready':all(os.environ.get(k) for k in ['TVE_SMTP_HOST','TVE_SMTP_USER','TVE_SMTP_PASSWORD','CRON_SECRET'])}
 

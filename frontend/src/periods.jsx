@@ -8,34 +8,39 @@ const compactMoney=value=>new Intl.NumberFormat('nl-NL',{style:'currency',curren
 
 function Comparison({title,series,field='total'}){
   const maximum=Math.max(1,...series.map(p=>Number(p[field]||0)));
-  const latest=series.at(-1)?.[field],previous=series.at(-2)?.[field];
-  const difference=latest!=null&&previous!=null?Number(latest)-Number(previous):null;
-  const years=[...new Set(series.map(p=>p.key.slice(0,4)))];
-  const left=48,right=432,top=28,bottom=180,step=(right-left)/Math.max(series.length,1);
-  const points=series.map((p,i)=>({...p,x:left+(i+.5)*step,y:bottom-Number(p[field]||0)/maximum*(bottom-top),known:p[field]!=null,color:yearColor(p.key.slice(0,4))}));
-  const segments=points.slice(1).flatMap((point,i)=>{
-    const previous=points[i];if(!point.known||!previous.known)return [];
-    const middle={x:(previous.x+point.x)/2,y:(previous.y+point.y)/2};
-    return [{a:previous,b:middle,color:previous.color},{a:middle,b:point,color:point.color}];
+  const years=[...new Set(series.map(p=>p.key.slice(0,4)))].sort();
+  const quarters=['Q1','Q2','Q3','Q4'];
+  const current=series.find(p=>p.current);
+  const previous=current&&series.find(p=>p.key===`${Number(current.key.slice(0,4))-1}-${current.key.split('-')[1]}`);
+  const difference=current?.[field]!=null&&previous?.[field]!=null?Number(current[field])-Number(previous[field]):null;
+  const left=48,right=432,top=28,bottom=180,step=(right-left)/quarters.length;
+  const barWidth=Math.min(22,58/Math.max(years.length,1));
+  const points=quarters.flatMap((quarter,q)=>years.map((year,i)=>{
+    const period=series.find(p=>p.key===`${year}-${quarter}`)||{key:`${year}-${quarter}`,[field]:null};
+    return {...period,year,quarter,x:left+(q+.5)*step+(i-(years.length-1)/2)*(barWidth+5),y:bottom-Number(period[field]||0)/maximum*(bottom-top),known:period[field]!=null,color:yearColor(year)};
+  }));
+  const segments=years.flatMap(year=>{
+    const annual=points.filter(p=>p.year===year);
+    return annual.slice(1).flatMap((point,i)=>annual[i].known&&point.known?[{a:annual[i],b:point,color:point.color,year}]:[]);
   });
-  return <section className="panel period-comparison"><div className="panel-head"><div><h3>{title}</h3><p>Productprijzen · zes vorige periodes en de lopende periode</p></div></div>
+  return <section className="panel period-comparison"><div className="panel-head"><div><h3>{title}</h3><p>Productprijzen · hetzelfde kwartaal naast elkaar per jaar</p></div></div>
     <div className="period-year-legend" aria-label="Kleuren per jaar">{years.map(year=><span key={year}><i style={{background:yearColor(year)}}/>{year}</span>)}</div>
     <div className="period-bars">
-      <svg className="period-combined-chart" viewBox="0 0 444 232" role="img" aria-label={`${title}: staven met een lijn tussen de toppen. Elke grafiek heeft een eigen euroschaal.`}>
+      <svg className="period-combined-chart" viewBox="0 0 444 232" role="img" aria-label={`${title}: per kwartaal staan de jaren naast elkaar, met een afzonderlijke lijn per jaar. Elke grafiek heeft een eigen euroschaal.`}>
         {[0,.5,1].map(fraction=>{const y=bottom-fraction*(bottom-top);return <g key={fraction}><line x1={left} x2={right} y1={y} y2={y} className="period-gridline"/><text x={left-5} y={y+3} textAnchor="end" className="period-axis-label">{compactMoney(maximum*fraction)}</text></g>})}
-        {points.map(p=><g className="period-bar" key={p.key}>
-          <title>{`${p.key}${p.current?' (lopend)':''}: ${p.known?formatPrice(p[field]):'Geen historie'}`}</title>
-          {p.known?<rect x={p.x-12} y={p.y} width={24} height={bottom-p.y} rx={3} fill={p.color} fillOpacity={.75}/>:<text x={p.x} y={bottom-8} textAnchor="middle" className="period-no-history">–</text>}
-          <text x={p.x} y={p.known?Math.max(p.y-8,12):top-12} textAnchor="middle" className="period-amount-label">{p.known?compactMoney(Number(p[field])):'Geen data'}</text>
-          <text x={p.x} y={bottom+18} textAnchor="middle" className="period-tick-label">{p.key.includes('-Q')?p.key.split('-')[1]:new Intl.DateTimeFormat('nl-NL',{month:'short'}).format(new Date(p.key+'-01T12:00:00'))}</text>
-          <text x={p.x} y={bottom+32} textAnchor="middle" className="period-axis-label">{p.key.slice(0,4)}{p.current?' · nu':''}</text>
+        {points.map(p=><g className="period-bar" key={p.key} data-period={p.key} data-year={p.year}>
+          <title>{`${p.key}${p.current?' (lopend)':''}: ${p.known?formatPrice(p[field]):p.future?'Nog niet begonnen':'Geen historie'}`}</title>
+          {p.known?<rect x={p.x-barWidth/2} y={p.y} width={barWidth} height={bottom-p.y} rx={3} fill={p.color} fillOpacity={.75}/>:<text x={p.x} y={bottom-8} textAnchor="middle" className="period-no-history">–</text>}
+          <text x={p.x+(p.year===years[0]?-3:3)} y={p.known?Math.max(p.y-8,12):top-12} textAnchor={p.year===years[0]?'end':'start'} className="period-amount-label">{p.known?compactMoney(Number(p[field])):''}</text>
+          <text x={p.x} y={bottom+15} textAnchor="middle" className="period-axis-label">{p.year}{p.current?' · nu':''}</text>
         </g>)}
-        <g className="period-trend" fill="none" strokeWidth={2.5} strokeLinecap="round">{segments.map((s,i)=><line key={i} x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y} stroke={s.color}/>)}</g>
-        {points.filter(p=>p.known).map(p=><circle className="period-trend-point" key={p.key} cx={p.x} cy={p.y} r={3} fill={p.color} stroke="white" strokeWidth={1.5}><title>{`${p.key}: ${formatPrice(p[field])}`}</title></circle>)}
+        {quarters.map((quarter,i)=><text key={quarter} x={left+(i+.5)*step} y={bottom+31} textAnchor="middle" className="period-tick-label">{quarter}</text>)}
+        <g className="period-trend" fill="none" strokeWidth={2.5} strokeLinecap="round">{segments.map((s,i)=><line key={i} x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y} stroke={s.color} data-year={s.year}/>)}</g>
+        {points.filter(p=>p.known).map(p=><circle className="period-trend-point" key={p.key} data-period={p.key} cx={p.x} cy={p.y} r={3} fill={p.color} stroke="white" strokeWidth={1.5}><title>{`${p.key}: ${formatPrice(p[field])}`}</title></circle>)}
       </svg>
     </div>
-    <p className="period-note">{difference===null?'Nog geen vorige periode om mee te vergelijken.':`Verschil met vorige periode: ${difference>0?'+':''}${formatPrice(difference.toFixed(2))}.`} Eigen euroschaal per grafiek. De lopende periode kan nog onvolledig zijn.</p>
-    <details><summary>Bedragen per periode</summary><table className="data-table"><thead><tr><th>Periode</th><th>Bedrag</th></tr></thead><tbody>{series.map(p=><tr key={p.key}><td>{p.key}</td><td>{p[field]===null?'Geen historie':formatPrice(p[field])}</td></tr>)}</tbody></table></details>
+    <p className="period-note">{difference===null?'Nog geen vergelijking met hetzelfde kwartaal vorig jaar beschikbaar.':`Verschil ${current.key} t.o.v. ${previous.key}: ${difference>0?'+':''}${formatPrice(difference.toFixed(2))}.`} Eigen euroschaal per grafiek. De lopende periode kan nog onvolledig zijn.</p>
+    <details><summary>Bedragen per periode</summary><table className="data-table"><thead><tr><th>Periode</th><th>Bedrag</th></tr></thead><tbody>{series.map(p=><tr key={p.key}><td>{p.key}</td><td>{p[field]===null?(p.future?'Nog niet begonnen':'Geen historie'):formatPrice(p[field])}</td></tr>)}</tbody></table></details>
   </section>
 }
 

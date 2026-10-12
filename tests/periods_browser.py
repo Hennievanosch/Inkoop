@@ -34,7 +34,12 @@ with tempfile.TemporaryDirectory(prefix='tve-period-browser-') as folder:
                 page.get_by_role('button',name='Account aanmaken',exact=True).click()
                 expect(page.get_by_role('heading',name='Bedrijfsvergelijking',exact=True)).to_be_visible()
                 expect(page.get_by_role('heading',name='Vergelijking voor de hele groep',exact=True)).to_be_visible()
-                expect(page.locator('.period-bars').first.locator('.period-bar')).to_have_count(7)
+                expect(page.locator('.period-bars').first.locator('.period-bar')).to_have_count(8)
+                reporting=page.request.get(base+'/api/reporting').json()
+                years=sorted({item['key'][:4] for item in reporting['series']})
+                expected=[f'{year}-Q{q}' for q in range(1,5) for year in years]
+                assert page.locator('.period-bars').first.locator('.period-bar').evaluate_all('(nodes)=>nodes.map(n=>n.dataset.period)')==expected
+
                 for removed in ['Leveranciers per categorie','Categorieën × bedrijven','Verbindingen met bedrijven']:
                     expect(page.get_by_role('heading',name=removed,exact=True)).to_have_count(0)
                 expect(page.get_by_role('button',name='Invoer voor deze periode bevestigen')).to_be_disabled()
@@ -58,7 +63,7 @@ with tempfile.TemporaryDirectory(prefix='tve-period-browser-') as folder:
                 expect(price).to_have_value('8,00')
                 expect(page.locator('.save-state')).to_contain_text('Alle wijzigingen opgeslagen')
                 report=page.request.get(base+'/api/reporting').json()
-                assert next(p for p in report['series'] if p['key']=='2026-06')['total']=='8.00',report
+                assert next(p for p in report['series'] if p['key']=='2026-Q2')['total']=='8.00',report
                 assert report['series'][-1]['total']=='12.34',report
                 page.set_viewport_size({'width':390,'height':844})
                 page.get_by_role('button',name='Menu openen',exact=True).click()
