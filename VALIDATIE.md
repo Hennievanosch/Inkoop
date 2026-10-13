@@ -1,5 +1,13 @@
 # Validatie — 10 oktober 2026
 
+## Categorieën koppelen en lege leverancierslijst herstellen — 13 oktober 2026
+
+De uitsluitend leesbare controle van de huidige Supabase-gegevens vindt geen productregels met een ontbrekende categorie-ID. Airtex, Contour markering, LED modules en Profielen zijn vier ongebruikte opties uit de oorspronkelijke Excel-keuzelijst. De nieuwe status **Nog niet gekoppeld** en knop **Leverancier koppelen** openen een nieuwe productregel met vooraf geselecteerde categorie en keuze uit bestaande of nieuwe leveranciers. Er worden geen leverancierskoppelingen geraden of automatisch gewijzigd. Bekijken vanuit Categorieën en Bedrijven wist de oude zoekterm en overige filters, zodat bestaande leveranciers niet verborgen blijven. Een lege uitgebreide leverancierslijst heeft een directe knop **Filters wissen en leveranciers tonen**.
+
+De eigenaar kiest de zoek- en filterbalk uitsluitend op Dashboard. Alle drie de keuzelijsten, gecombineerde zoekvragen, wissen, Enter en openen via het logo zijn gecontroleerd. De menuoptie Leveranciers bewaart nu ook een selectie met alleen keuzelijstfilters. Spaties en accenten worden eveneens consistent behandeld in de prijsweergaven en categorie-/bedrijfszoekvelden.
+
+De productiebuild, zes JavaScript-controles en gerichte browsercontroles slagen met afzonderlijke lokale gegevens. De categoriecontrole test koppelen aan bestaande en nieuwe leveranciers, behoud van andere productregels en prijzen, vernieuwen, geen verborgen filters, herstel van een lege lijst en tablet/mobiel. Er zijn geen JavaScript-fouten of horizontale pagina-overloop. Reproduceerbaar: `python tests/categories_browser.py`. Rapporten: `test-results/categorieen.json` en `test-results/zoeken.json`.
+
 ## Zoekresultaten direct zichtbaar — 13 oktober 2026
 
 De zoekbalk filterde eerder alleen de onderste dashboardtellingen en toonde geen gevonden leveranciers. Bovendien werd de zoekterm gewist bij navigatie naar Leveranciers. Een resultatenlijst staat nu direct onder de zoekbalk, met leveranciers, afzonderlijke producten en bedrijfskoppelingen. Zoeken negeert hoofdletters, accenten en extra spaties en ondersteunt woorden uit meerdere velden. Enter, **Alle resultaten bekijken** en de menuoptie Leveranciers behouden een actieve zoekopdracht. Leveranciersprijzen en productdetails openen rechtstreeks vanuit de resultaten. De voorvertoning van maximaal acht regels laat de volledige selectie beschikbaar; geen matches en wissen zijn expliciet afgehandeld. De leverancierspagina houdt de eerder verwijderde filterbalk weg.
