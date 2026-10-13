@@ -1,5 +1,11 @@
 # Validatie — 10 oktober 2026
 
+## Zoekresultaten direct zichtbaar — 13 oktober 2026
+
+De zoekbalk filterde eerder alleen de onderste dashboardtellingen en toonde geen gevonden leveranciers. Bovendien werd de zoekterm gewist bij navigatie naar Leveranciers. Een resultatenlijst staat nu direct onder de zoekbalk, met leveranciers, afzonderlijke producten en bedrijfskoppelingen. Zoeken negeert hoofdletters, accenten en extra spaties en ondersteunt woorden uit meerdere velden. Enter, **Alle resultaten bekijken** en de menuoptie Leveranciers behouden een actieve zoekopdracht. Leveranciersprijzen en productdetails openen rechtstreeks vanuit de resultaten. De voorvertoning van maximaal acht regels laat de volledige selectie beschikbaar; geen matches en wissen zijn expliciet afgehandeld. De leverancierspagina houdt de eerder verwijderde filterbalk weg.
+
+Drie JavaScript-regressietests slagen voor normalisatie, gecombineerde leverancier-/product-/categorievragen, lege en onbekende termen en ongewijzigde brongegevens. De productiebuild en gerichte browsercontrole slagen voor directe resultaten, meerdere producten, prijzen/details openen, Enter en menunavigatie, gecombineerde filters, nul resultaten, wissen, de volledige selectie en desktop/mobiel zonder JavaScript-fouten. De schrijftests gebruiken een afzonderlijke lokale API. Rapporten: `test-results/zoeken.json` en `test-results/zoeken-published.json`.
+
 ## Leveranciers zonder zoek- en filterbalk — 13 oktober 2026
 
 De zoek- en filterbalk is verwijderd uit alle drie de prijsweergaven bij Leveranciers. Het Dashboard behoudt zijn filters. Bij normale navigatie naar Leveranciers worden oude filters gewist. Een selectie vanuit een dashboardgrafiek blijft zichtbaar als korte selectieaanduiding met **Alles tonen**. De afzonderlijke leverancierskeuze in het prijsoverzicht blijft beschikbaar. De productiebuild en de gerichte browsercontrole slagen op desktop en mobiel: alle prijsweergaven openen, meerdere producten blijven behouden, grafiekselectie en wissen werken, geen JavaScript-fouten of horizontale pagina-overloop. De controle gebruikt een afzonderlijke lokale API. Rapporten: `test-results/leveranciers-zonder-filterbalk.json` en `test-results/leveranciers-zonder-filterbalk-published.json`.
