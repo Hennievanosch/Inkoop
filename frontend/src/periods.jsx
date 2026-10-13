@@ -17,9 +17,9 @@ function Comparison({title,series,field='total'}){
   const current=quarterly.find(p=>p.current);
   const previous=current&&quarterly.find(p=>p.key===`${Number(current.key.slice(0,4))-1}-${current.key.split('-')[1]}`);
   const difference=current?.[field]!=null&&previous?.[field]!=null?Number(current[field])-Number(previous[field]):null;
-  const left=48,right=432,top=28,bottom=180,step=(right-left)/Math.max(groups.length,1);
+  const left=72,right=464,top=38,bottom=190,step=(right-left)/Math.max(groups.length,1);
   const barWidth=Math.min(22,58/Math.max(quarterYears.length,1));
-  const points=groups.flatMap((group,q)=>group.items.map((p,i)=>({...p,year:p.key.slice(0,4),quarter:p.key.split('-')[1],x:left+(q+.5)*step+(i-(group.items.length-1)/2)*(barWidth+5),y:bottom-Number(p[field]||0)/maximum*(bottom-top),known:p[field]!=null,color:yearColor(p.key.slice(0,4)),annual:!p.key.includes('-Q')})));
+  const points=groups.flatMap((group,q)=>group.items.map((p,i)=>({...p,year:p.key.slice(0,4),quarter:p.key.split('-')[1],x:left+(q+.5)*step+(i-(group.items.length-1)/2)*(barWidth+10),y:bottom-Number(p[field]||0)/maximum*(bottom-top),known:p[field]!=null,color:yearColor(p.key.slice(0,4)),annual:!p.key.includes('-Q')})));
   const segments=quarterYears.flatMap(year=>{
     const yearly=points.filter(p=>p.year===year&&!p.annual);
     return yearly.slice(1).flatMap((point,i)=>yearly[i].known&&point.known?[{a:yearly[i],b:point,color:point.color,year}]:[]);
@@ -27,13 +27,13 @@ function Comparison({title,series,field='total'}){
   return <section className="panel period-comparison"><div className="panel-head"><div><h3>{title}</h3><p>2026 als jaarbedrag · kwartaalmetingen vanaf januari 2027</p></div></div>
     <div className="period-year-legend" aria-label="Kleuren per jaar">{years.map(year=><span key={year}><i style={{background:yearColor(year)}}/>{year}</span>)}</div>
     <div className="period-bars">
-      <svg className="period-combined-chart" viewBox="0 0 444 232" role="img" aria-label={`${title}: 2026 als één jaarbedrag; kwartalen vanaf 2027 met een eigen lijn per meetjaar. Elke grafiek heeft een eigen euroschaal.`}>
+      <svg className="period-combined-chart" viewBox="0 0 476 244" role="img" aria-label={`${title}: 2026 als één jaarbedrag; kwartalen vanaf 2027 met een eigen lijn per meetjaar. Elke grafiek heeft een eigen euroschaal.`}>
         {[0,.5,1].map(fraction=>{const y=bottom-fraction*(bottom-top);return <g key={fraction}><line x1={left} x2={right} y1={y} y2={y} className="period-gridline"/><text x={left-5} y={y+3} textAnchor="end" className="period-axis-label">{compactMoney(maximum*fraction)}</text></g>})}
         {points.map(p=><g className="period-bar" key={p.key} data-period={p.key} data-year={p.year}>
           <title>{`${p.key}${p.annual?' (heel jaar)':p.current?' (lopend)':''}: ${p.known?formatPrice(p[field]):p.future?'Nog niet begonnen':'Geen historie'}`}</title>
           {p.known?<rect x={p.x-barWidth/2} y={p.y} width={barWidth} height={bottom-p.y} rx={3} fill={p.color} fillOpacity={1}/>:<text x={p.x} y={bottom-8} textAnchor="middle" className="period-no-history">–</text>}
-          <text x={p.x+(p.annual?0:p.year===quarterYears[0]?-3:3)} y={p.known?Math.max(p.y-8,12):top-12} textAnchor={p.annual?'middle':p.year===quarterYears[0]?'end':'start'} style={{fontSize:quarterYears.length>1?8:9}} className="period-amount-label">{p.known?compactMoney(Number(p[field])):''}</text>
-          <text x={p.x} y={bottom+15} textAnchor="middle" className="period-axis-label">{p.annual?'Heel jaar':p.year}{p.current&&!p.annual?' · nu':''}</text>
+          <text x={p.x+(p.annual?0:p.year===quarterYears[0]?-3:3)} y={p.known?Math.max(p.y-(quarterYears.length>1&&!p.annual&&p.year!==quarterYears[0]?24:10),16):top-12} textAnchor={p.annual?'middle':p.year===quarterYears[0]?'end':'start'} className="period-amount-label">{p.known?compactMoney(Number(p[field])):''}</text>
+          <text x={p.x} y={bottom+15} textAnchor="middle" className="period-axis-label">{p.annual?'Heel jaar':p.year}</text>
         </g>)}
         {groups.map((group,i)=><text key={group.label} x={left+(i+.5)*step} y={bottom+31} textAnchor="middle" className="period-tick-label">{group.label}</text>)}
         <g className="period-trend" fill="none" strokeWidth={2.5} strokeLinecap="round">{segments.map((s,i)=><line key={i} x1={s.a.x} y1={s.a.y} x2={s.b.x} y2={s.b.y} stroke={s.color} data-year={s.year}/>)}</g>
