@@ -1,5 +1,9 @@
 # Validatie — 10 oktober 2026
 
+## Duidelijkere tekstkleuren — 13 oktober 2026
+
+Lichte teksten zijn donkerder gemaakt op de lichte achtergronden: toelichtingen, tabelkoppen, labels, voetnoten, keuzelijsten, zoekvelden, prijsdatums en formulieren. Het donkerblauwe zijmenu heeft helderdere tekst. Groene en gele meldingen houden hun betekenis met sterker contrast. Ook de SVG-aslabels in de periodegrafieken zijn duidelijker. De wijziging is toegepast op de actuele main-versie, inclusief periodegrafieken, prijsdatums, dashboardexport en de rode BACKUP-knop. De productiebuild slaagt. Op 18 gecontroleerde schermen en toestanden op desktop en mobiel hebben de gemeten zichtbare, actieve HTML- en SVG-teksten minimaal 4,5:1 contrast, zonder JavaScript-fouten of horizontale pagina-overloop. De schrijftests gebruiken een afzonderlijke lokale API. Rapporten: `test-results/leesbaarheid.json`, `test-results/leesbaarheid-published.json` en `test-results/leesbaarheid-deployment.json`.
+
 ## Knop Productregels verwijderd — 12 oktober 2026
 
 De knop **Productregels** is verwijderd uit het leveranciersoverzicht. De drie blauwe prijsweergaven blijven werken op desktop, tablet en mobiel. De productiebuild en alle 21 bestaande browsercontroles slagen. Het uitgebreide overzicht blijft via dashboardgrafieken beschikbaar; de browsercontrole gebruikt deze bestaande route voor beheer van extra velden en gezamenlijke wijzigingen. De gepubliceerde interface is geopend met geverifieerde HTTPS-assets en een afzonderlijke lokale API: de knop ontbreekt, alle drie de prijsweergaven openen en er zijn geen JavaScript-fouten. Een uitsluitend leesbare productiecontrole bevestigt behoud van gegevens (revisie 37, 64 regels, 57 leveranciers), beide accounts, wachtwoorden en sessies. Rapporten: `test-results/zonder-productregels-published.json` en `test-results/zonder-productregels-deployment.json`.
