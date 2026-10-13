@@ -1,5 +1,9 @@
 # Validatie — 10 oktober 2026
 
+## Leveranciers zonder zoek- en filterbalk — 13 oktober 2026
+
+De zoek- en filterbalk is verwijderd uit alle drie de prijsweergaven bij Leveranciers. Het Dashboard behoudt zijn filters. Bij normale navigatie naar Leveranciers worden oude filters gewist. Een selectie vanuit een dashboardgrafiek blijft zichtbaar als korte selectieaanduiding met **Alles tonen**. De afzonderlijke leverancierskeuze in het prijsoverzicht blijft beschikbaar. De productiebuild en de gerichte browsercontrole slagen op desktop en mobiel: alle prijsweergaven openen, meerdere producten blijven behouden, grafiekselectie en wissen werken, geen JavaScript-fouten of horizontale pagina-overloop. De controle gebruikt een afzonderlijke lokale API. Rapporten: `test-results/leveranciers-zonder-filterbalk.json` en `test-results/leveranciers-zonder-filterbalk-published.json`.
+
 ## Duidelijkere tekstkleuren — 13 oktober 2026
 
 Lichte teksten zijn donkerder gemaakt op de lichte achtergronden: toelichtingen, tabelkoppen, labels, voetnoten, keuzelijsten, zoekvelden, prijsdatums en formulieren. Het donkerblauwe zijmenu heeft helderdere tekst. Groene en gele meldingen houden hun betekenis met sterker contrast. Ook de SVG-aslabels in de periodegrafieken zijn duidelijker. De wijziging is toegepast op de actuele main-versie, inclusief periodegrafieken, prijsdatums, dashboardexport en de rode BACKUP-knop. De productiebuild slaagt. Op 18 gecontroleerde schermen en toestanden op desktop en mobiel hebben de gemeten zichtbare, actieve HTML- en SVG-teksten minimaal 4,5:1 contrast, zonder JavaScript-fouten of horizontale pagina-overloop. De schrijftests gebruiken een afzonderlijke lokale API. Rapporten: `test-results/leesbaarheid.json`, `test-results/leesbaarheid-published.json` en `test-results/leesbaarheid-deployment.json`.
