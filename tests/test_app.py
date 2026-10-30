@@ -128,6 +128,55 @@ class AppTests(unittest.TestCase):
         self.assertEqual(profile['email'],'collega@example.test');self.assertEqual(profile['role'],'company')
         self.assertEqual(self.client.post('/api/users/invite',json={'email':'collega@example.test','role':'admin'}).status_code,409)
 
+    def test_expired_invitation_can_be_reissued_without_duplicate_user(self):
+        first=self.invite()
+        with db() as c:c.execute('UPDATE invitations SET expires=0 WHERE id=?',(first['id'],))
+        self.assertEqual(self.client.get('/api/users').json()['invitations'][0]['status'],'expired')
+        second=self.invite(email='collega@example.test')
+        self.assertNotEqual(first['token'],second['token'])
+        visitor=TestClient(app)
+        self.assertEqual(visitor.post('/api/auth/invitation',json={'token':first['token']}).status_code,410)
+        self.assertEqual(visitor.post('/api/auth/invitation',json={'token':second['token']}).status_code,200)
+        self.accept(second)
+        self.assertEqual(len(self.client.get('/api/users').json()['users']),2)
+
+    def test_existing_user_can_reset_password_with_one_time_admin_link(self):
+        original=self.get()
+        member=self.accept(self.invite())
+        profile=member.get('/api/auth/status').json()['user']
+        outsider=TestClient(app)
+        endpoint='/api/users/'+profile['id']+'/reset-link'
+        self.assertEqual(outsider.post(endpoint,json={}).status_code,401)
+        self.assertEqual(member.post(endpoint,json={}).status_code,403)
+        first=self.client.post(endpoint,json={})
+        self.assertEqual(first.status_code,200,first.text)
+        first=first.json()
+        self.assertEqual(first['kind'],'reset')
+        self.assertEqual(outsider.post('/api/auth/password-reset',json={'token':first['token']}).status_code,200)
+        second=self.client.post(endpoint,json={})
+        self.assertEqual(second.status_code,200,second.text)
+        second=second.json()
+        self.assertEqual(outsider.post('/api/auth/password-reset',json={'token':first['token']}).status_code,410)
+        self.assertEqual(outsider.post('/api/auth/accept-password-reset',json={'token':second['token'],'password':'short'}).status_code,422)
+        self.assertEqual(outsider.post('/api/auth/accept-password-reset',json={'token':second['token'],'password':'new-personal-password-1234'}).status_code,200)
+        self.assertEqual(outsider.post('/api/auth/password-reset',json={'token':second['token']}).status_code,410)
+        self.assertEqual(member.get('/api/state').status_code,401)
+        self.assertEqual(member.post('/api/auth/login',json={'email':profile['email'],'password':'personal-colleague-password'}).status_code,401)
+        self.assertEqual(outsider.get('/api/auth/status').json()['user']['company_ids'],profile['company_ids'])
+        self.assertEqual(outsider.get('/api/auth/status').json()['user']['role'],profile['role'])
+        self.assertEqual(self.get(),original)
+        self.assertEqual(member.post('/api/auth/login',json={'email':profile['email'],'password':'new-personal-password-1234'}).status_code,200)
+
+    def test_expired_password_reset_link_cannot_be_used(self):
+        member=self.accept(self.invite())
+        profile=member.get('/api/auth/status').json()['user']
+        reset=self.client.post('/api/users/'+profile['id']+'/reset-link',json={}).json()
+        with db() as c:c.execute('UPDATE password_resets SET expires=0 WHERE id=?',(reset['id'],))
+        outsider=TestClient(app)
+        self.assertEqual(outsider.post('/api/auth/password-reset',json={'token':reset['token']}).status_code,410)
+        self.assertEqual(outsider.post('/api/auth/accept-password-reset',json={'token':reset['token'],'password':'new-personal-password-1234'}).status_code,410)
+        self.assertEqual(member.get('/api/state').status_code,200)
+
     def test_access_changes_revoke_sessions_and_protect_owner_and_versions(self):
         s=self.get()['state'];c,d=[company['id'] for company in s['companies'][:2]]
         colleague=self.accept(self.invite([c]));profile=colleague.get('/api/auth/status').json()['user']
