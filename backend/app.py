@@ -111,6 +111,8 @@ def initialize():
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS user_access(user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('admin','company')), company_ids TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, version INTEGER NOT NULL DEFAULT 1, display_name TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS invitations(id TEXT PRIMARY KEY, email TEXT NOT NULL, display_name TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','company')), company_ids TEXT NOT NULL, token_hash TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL, expires REAL NOT NULL, invited_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, used_at TEXT, canceled_at TEXT);
+        CREATE TABLE IF NOT EXISTS password_resets(id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, token_hash TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL, expires REAL NOT NULL, requested_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, used_at TEXT, canceled_at TEXT);
+        CREATE INDEX IF NOT EXISTS password_resets_user_idx ON password_resets(user_id);
         CREATE TABLE IF NOT EXISTS access_audit(id TEXT PRIMARY KEY, at TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL);
         ''')
         if not c.execute("SELECT 1 FROM settings WHERE key='access_migrated_v1'").fetchone():
@@ -323,6 +325,17 @@ def valid_invitation(c,token):
     return record
 
 
+def valid_password_reset(c, token):
+    if not isinstance(token, str) or not 32 <= len(token) <= 128:
+        raise HTTPException(410, 'Deze wachtwoordlink is verlopen of al gebruikt. Vraag de beheerder om een nieuwe link.')
+    record=c.execute('SELECT r.*,u.email,a.active,a.display_name FROM password_resets r JOIN users u ON u.id=r.user_id JOIN user_access a ON a.user_id=u.id WHERE r.token_hash=?',(hashlib.sha256(token.encode()).hexdigest(),)).fetchone()
+    if not record or record['used_at'] or record['canceled_at'] or record['expires']<=time.time():
+        raise HTTPException(410,'Deze wachtwoordlink is verlopen of al gebruikt. Vraag de beheerder om een nieuwe link.')
+    if not record['active']:
+        raise HTTPException(403,'Dit account is uitgeschakeld. Neem contact op met de beheerder.')
+    return record
+
+
 @app.get('/api/users')
 def list_users(u=Depends(admin)):
     with db() as c:
@@ -355,6 +368,45 @@ def invite_user(body:dict,u=Depends(admin)):
         access_log(c,u,'Uitnodiging gemaakt',{'email':email,'role':role,'company_ids':company_ids})
     # Only this response contains the secret; lists and the database store its hash.
     return {'id':invitation_id,'token':token,'email':email,'expires':expires}
+
+
+@app.post('/api/users/{user_id}/reset-link')
+def create_password_reset_link(user_id:str,u=Depends(admin)):
+    token=secrets.token_urlsafe(32);reset_id=uid();expires=time.time()+86400
+    with db() as c:
+        c.execute('BEGIN IMMEDIATE');u=check_admin(c,u)
+        account=c.execute('SELECT u.id,u.email,a.active FROM users u JOIN user_access a ON a.user_id=u.id WHERE u.id=?',(user_id,)).fetchone()
+        if not account:
+            raise HTTPException(404,'Gebruiker niet gevonden.')
+        if not account['active']:
+            raise HTTPException(422,'Dit account is uitgeschakeld. Zet eerst de toegang actief.')
+        c.execute('UPDATE password_resets SET canceled_at=? WHERE user_id=? AND used_at IS NULL AND canceled_at IS NULL',(now(),user_id))
+        c.execute('INSERT INTO password_resets VALUES(?,?,?,?,?,?,?,?)',(reset_id,user_id,hashlib.sha256(token.encode()).hexdigest(),now(),expires,u['id'],None,None))
+        access_log(c,u,'Wachtwoordlink gemaakt',{'email':account['email']})
+    return {'id':reset_id,'token':token,'email':account['email'],'expires':expires,'kind':'reset'}
+
+
+@app.post('/api/auth/password-reset')
+def inspect_password_reset(body:dict):
+    with db() as c:
+        record=valid_password_reset(c,body.get('token'))
+    return {'email':record['email'],'display_name':record['display_name'],'expires':record['expires']}
+
+
+@app.post('/api/auth/accept-password-reset')
+def accept_password_reset(body:dict,response:Response,request:Request):
+    password=body.get('password')
+    if not isinstance(password,str) or not 12<=len(password)<=1024:
+        raise HTTPException(422,'Kies een wachtwoord van minstens 12 en maximaal 1024 tekens.')
+    with db() as c:
+        c.execute('BEGIN IMMEDIATE')
+        record=valid_password_reset(c,body.get('token'))
+        c.execute('UPDATE users SET password=? WHERE id=?',(password_hash(password),record['user_id']))
+        c.execute('DELETE FROM sessions WHERE user_id=?',(record['user_id'],))
+        c.execute('UPDATE password_resets SET used_at=? WHERE id=?',(now(),record['id']))
+        access_log(c,{'email':record['email']},'Wachtwoord gewijzigd via persoonlijke link',{})
+    session(response,request,record['user_id'])
+    return {'ok':True}
 
 
 @app.post('/api/users/invitations/{invitation_id}/cancel')
