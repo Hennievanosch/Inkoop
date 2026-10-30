@@ -6,7 +6,7 @@ import BrandSpinner from './BrandSpinner';
 import BackupsPanel from './BackupsPanel';
 import tveGroupLogo from './assets/tve-group-logo.png';
 import {sumPrices,formatPrice,companyTotals} from './pricing';
-import {InvitationAuth,UsersManager} from './accounts';
+import {InvitationAuth,PasswordResetAuth,UsersManager} from './accounts';
 import {PeriodDashboard} from './periods';
 import {normalizeSearch,matchesSupplierProduct} from './search';
 
@@ -52,10 +52,12 @@ function DownloadFile(blob,name){const url=URL.createObjectURL(blob);const a=doc
 
 function Auth({onAuth}){
   const [invite,setInvite]=useState(()=>new URLSearchParams(location.hash.slice(1)).get('invite')||'');
+  const [reset,setReset]=useState(()=>new URLSearchParams(location.hash.slice(1)).get('reset')||'');
   const [status,setStatus]=useState(null),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[code,setCode]=useState(()=>new URLSearchParams(location.hash.slice(1)).get('setup')||''),[busy,setBusy]=useState(false),[error,setError]=useState('');
-  useEffect(()=>{api('/auth/status').then(s=>{setStatus(s);if(s.user&&!invite)onAuth(s.user)}).catch(e=>setError(e.message));if(location.hash&&!invite)history.replaceState(null,'',location.pathname)},[invite]);
+  useEffect(()=>{api('/auth/status').then(s=>{setStatus(s);if(s.user&&!invite&&!reset)onAuth(s.user)}).catch(e=>setError(e.message));if(location.hash&&!invite&&!reset)history.replaceState(null,'',location.pathname)},[invite,reset]);
   async function submit(e){e.preventDefault();setBusy(true);setError('');try{await post(status.setup_required?'/auth/setup':'/auth/login',{email,password,code});const s=await api('/auth/status');onAuth(s.user)}catch(e){setError(e.message)}finally{setBusy(false)}}
   if(invite)return <InvitationAuth token={invite} onAuth={onAuth} onCancel={()=>{history.replaceState(null,'',location.pathname);setInvite('')}} api={api} post={post} BrandLogo={BrandLogo} Field={Field} Button={Button}/>;
+  if(reset)return <PasswordResetAuth token={reset} onAuth={onAuth} onCancel={()=>{history.replaceState(null,'',location.pathname);setReset('')}} api={api} post={post} BrandLogo={BrandLogo} Field={Field} Button={Button}/>;
   return <div className="auth-page"><div className="auth-brand"><BrandLogo/><div><span className="eyebrow">SAMEN STERKER</span><h1>Een helder overzicht.<br/>Sterke verbindingen.</h1><p>Alle leveranciers, productcategorieën en bedrijfskoppelingen op één plek.</p><div className="auth-pill"><ShieldCheck size={18}/> Beveiligde toegang · TVE GROUP</div></div><span className="auth-bottom">LEVERANCIERSBEHEER</span></div><form className="auth-card" onSubmit={submit}><div className="auth-mark"><Link2 size={26}/></div><span className="eyebrow">LEVERANCIERSPORTAAL</span><h2>{status?.setup_required?'Welkom bij TVE GROUP':'Welkom terug'}</h2><p>{status?.setup_required?'Maak uw beheerdersaccount aan om veilig met de leveranciersgegevens te werken.':'Log in om uw leveranciers te beheren.'}</p>{error&&<div role="alert" className="alert error">{error}</div>}<Field label="E-mailadres"><input type="email" required autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="uw.naam@bedrijf.nl"/></Field><Field label={status?.setup_required?'Wachtwoord (minstens 12 tekens)':'Wachtwoord'}><input type="password" required minLength={status?.setup_required?12:1} autoComplete={status?.setup_required?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)}/></Field>{status?.setup_required&&!code&&<Field label="Eenmalige openingscode" hint="Gebruik de eenmalige privé-openingslink die u bij de oplevering ontvangt."><input required value={code} onChange={e=>setCode(e.target.value)}/></Field>}<Button className="primary full" disabled={!status||busy} icon={!status||busy?BrandSpinner:ArrowRight}>{busy?'Even geduld…':status?.setup_required?'Account aanmaken':'Inloggen'}</Button><p className="auth-note"><ShieldCheck size={15}/> Uw gegevens worden veilig in de database bewaard.</p></form></div>
 }
 
