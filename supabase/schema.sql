@@ -42,6 +42,17 @@ CREATE TABLE IF NOT EXISTS tve.invitations (
   invited_by TEXT NOT NULL REFERENCES tve.users(id) ON DELETE CASCADE,
   used_at TEXT, canceled_at TEXT
 );
+-- One-time password links for existing accounts; never changes access or roles.
+CREATE TABLE IF NOT EXISTS tve.password_resets (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES tve.users(id) ON DELETE CASCADE,
+  token_hash TEXT UNIQUE NOT NULL,
+  created_at TEXT NOT NULL,
+  expires DOUBLE PRECISION NOT NULL,
+  requested_by TEXT NOT NULL REFERENCES tve.users(id) ON DELETE CASCADE,
+  used_at TEXT, canceled_at TEXT
+);
+CREATE INDEX IF NOT EXISTS password_resets_user_idx ON tve.password_resets(user_id);
 CREATE TABLE IF NOT EXISTS tve.access_audit (
   id TEXT PRIMARY KEY, at TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL
 );
