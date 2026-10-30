@@ -30,7 +30,7 @@ export function UsersManager({data,currentUser,api,post,Field,Button,Modal,notif
   function emailInvitation(){
     if(!created)return;
     const subject='Uitnodiging TVE GROUP leveranciersportaal';
-    const body=['Hallo,','','Je bent uitgenodigd voor het TVE GROUP leveranciersportaal.','Open de onderstaande persoonlijke link om je account te activeren en zelf een wachtwoord te kiezen:','',created.url,'',`Deze link is eenmalig te gebruiken en geldig tot ${new Date(created.expires*1000).toLocaleString('nl-NL')}.`,'','Met vriendelijke groet,','TVE GROUP'].join('\\n');
+    const body=['Hallo,','','Je bent uitgenodigd voor het TVE GROUP leveranciersportaal.','Open de onderstaande persoonlijke link om je account te activeren en zelf een wachtwoord te kiezen:','',created.url,'',`Deze link is eenmalig te gebruiken en geldig tot ${new Date(created.expires*1000).toLocaleString('nl-NL')}.`,'','Met vriendelijke groet,','TVE GROUP'].join('\n');
     window.location.href=`mailto:${created.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
   const pending=records?.invitations.filter(invite=>invite.status==='pending')||[];
